@@ -56,38 +56,3 @@ begin
 end $$;
 revoke execute on function public.save_game(uuid, int, text, text, jsonb, jsonb, jsonb, jsonb, jsonb) from public, anon, authenticated;
 grant execute on function public.save_game(uuid, int, text, text, jsonb, jsonb, jsonb, jsonb, jsonb) to service_role;
-
--- tracking
-create table public.events (
-  id bigint generated always as identity primary key,
-  at timestamptz not null default now(),
-  type text not null,
-  code text,
-  user_id uuid,
-  email text,
-  name text,
-  data jsonb not null default '{}'::jsonb
-);
-create index events_at_idx on public.events (at desc);
-create index events_type_idx on public.events (type);
-alter table public.events enable row level security;
-update public.app_config set key = 'require_login' where key = 'require_login_to_create';
-create or replace view public.event_summary with (security_invoker = true) as
-select date_trunc('day', at)::date as dag, type, count(*) as aantal, count(distinct coalesce(email, name)) as mensen
-from public.events group by 1, 2 order by 1 desc, 2;
-revoke all on public.event_summary from anon, authenticated;
-
--- chat
-create table public.chat_messages (
-  id bigint generated always as identity primary key,
-  code text not null,
-  at timestamptz not null default now(),
-  player_id text not null,
-  name text not null,
-  color smallint,
-  text text not null check (char_length(text) between 1 and 300)
-);
-create index chat_messages_code_idx on public.chat_messages (code, id desc);
-alter table public.chat_messages enable row level security;
-create policy "chat readable with the room code" on public.chat_messages for select to anon, authenticated using (true);
-alter publication supabase_realtime add table public.chat_messages;

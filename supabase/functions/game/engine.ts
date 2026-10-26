@@ -41,6 +41,8 @@ export interface LastMove {
   kills: number[];
   swap?: [number, number];
   count?: number;
+  /** Whether an all-cards discard actually earned a stick. */
+  earnsStick?: boolean;
 }
 
 export interface LogEntry extends LastMove { n: number; round: number }
@@ -58,6 +60,8 @@ export interface State {
   freeExitDone: boolean;
   winner: Team | null;
   mode: Mode;
+  /** Whether this seat played any card in the current hand round. */
+  playedThisRound: boolean[];
   moveNo: number;
   last: LastMove | null;
   log: LogEntry[];
@@ -130,6 +134,7 @@ export function newGame(mode: Mode, rng: () => number = Math.random): State {
     freeExitDone: false,
     winner: null,
     mode,
+    playedThisRound: [false, false, false, false],
     moveNo: 0,
     last: null,
     log: [],
@@ -141,6 +146,7 @@ export function newGame(mode: Mode, rng: () => number = Math.random): State {
 /** Deel 7 kaarten, één per één, te beginnen links (wijzerzin) van de deler. */
 function deal(st: State) {
   st.round += 1;
+  st.playedThisRound = [false, false, false, false];
   for (let r = 0; r < 7; r++) {
     for (let s = 1; s <= 4; s++) {
       const seat = ((st.dealer + s) % 4) as Color;
@@ -296,12 +302,12 @@ function sevenRaw(P: Piece[], c: Color, remaining: number, lastPiece: number | n
   return res;
 }
 
-function sevenCompletable(P: Piece[], c: Color, remaining: number, lastPiece: number | null): boolean {
-  if (remaining === 0) return true;
+function sevenCompletable(P: Piece[], c: Color, remaining: number, lastPiece: number | null, needsTrack = false): boolean {
+  if (remaining === 0) return !needsTrack;
   for (const o of sevenRaw(P, c, remaining, lastPiece)) {
     const Q = clonePieces(P);
     relocate(Q, o.piece, o.to, [], []);
-    if (sevenCompletable(Q, c, remaining - o.n, o.piece)) return true;
+    if (sevenCompletable(Q, c, remaining - o.n, o.piece, needsTrack && P[o.piece].pos.t !== 'track')) return true;
   }
   return false;
 }
@@ -358,12 +364,21 @@ export function rankHasMove(P: Piece[], c: Color, rank: Rank): boolean {
   return movesForRank(P, c, rank).length > 0;
 }
 
+/** Older saved games reconstruct this flag from their current-round action log. */
+export function playedCardThisRound(st: Pick<State, 'round' | 'log'> & Partial<Pick<State, 'playedThisRound'>>, c: Color): boolean {
+  if (st.playedThisRound?.[c] !== undefined) return st.playedThisRound[c];
+  return st.log.some((entry) => entry.round === st.round && entry.by === c && entry.kind === 'play');
+}
+
 export function handHasMove(P: Piece[], c: Color, hand: Card[]): boolean {
   const seen = new Set<Rank>();
   for (const card of hand) {
     if (seen.has(card.rank)) continue;
     seen.add(card.rank);
-    if (rankHasMove(P, c, card.rank)) return true;
+    // Alleen schuiven binnen het huisje verplicht je niet om te spelen.
+    if (card.rank === '7' ? sevenCompletable(P, c, 7, null, true) :
+      movesForRank(P, c, card.rank).some(({ move }) => move.kind === 'out' ||
+        (move.kind !== 'seven' && P[move.piece].pos.t === 'track'))) return true;
   }
   return false;
 }
@@ -428,6 +443,10 @@ function pushLog(st: State, lm: LastMove) {
 export function applyAction(st: State, c: Color, a: Action): void {
   if (st.winner !== null) throw new RuleError('game_over');
   if (st.turn !== c) throw new RuleError('not_your_turn');
+  // Fill the new field lazily for games already in progress during an upgrade.
+  if (!Array.isArray(st.playedThisRound)) {
+    st.playedThisRound = COLORS.map((color) => playedCardThisRound(st, color));
+  }
   const hand = st.hands[c];
   const free = needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand);
   if (free && a.type !== 'freeExit') throw new RuleError('free_exit_first');
@@ -436,7 +455,6 @@ export function applyAction(st: State, c: Color, a: Action): void {
     if (idx < 0) throw new RuleError('no_such_card');
     return idx;
   };
-  const strict = st.mode !== 'training';
 
   switch (a.type) {
     case 'freeExit': {
@@ -447,32 +465,25 @@ export function applyAction(st: State, c: Color, a: Action): void {
       const tr = relocate(st.pieces, p.id, { t: 'track', i: START(c) }, [], kills);
       st.sticks[c] = 0;
       st.freeExitDone = true;
-      st.moveNo++;
       pushLog(st, { by: c, kind: 'freeExit', moves: [tr], kills });
+      st.moveNo++;
       return; // beurt gaat verder: nu nog een kaart spelen
     }
     case 'lay': {
       findCard(a.card);
-      if (st.laid !== null && st.laid !== a.card) {
-        const laidCard = hand.find((h) => h.id === st.laid);
-        if (strict && laidCard && rankHasMove(st.pieces, c, laidCard.rank)) throw new RuleError('card_laid');
-      }
       st.laid = a.card;
       st.moveNo++;
       return;
     }
     case 'play': {
       const idx = findCard(a.card);
-      if (strict && st.laid !== null && st.laid !== a.card) {
-        const laidCard = hand.find((h) => h.id === st.laid);
-        if (laidCard && rankHasMove(st.pieces, c, laidCard.rank)) throw new RuleError('card_laid');
-      }
       const card = hand[idx];
       const r = matchMove(st.pieces, c, card.rank, a.move);
       if (!r) throw new RuleError('illegal_move');
       st.pieces = r.P;
       hand.splice(idx, 1);
       st.center.push({ card, hidden: false, by: c });
+      st.playedThisRound[c] = true;
       st.sticks[c] = 0;
       pushLog(st, { by: c, kind: 'play', rank: card.rank, moves: r.traces, kills: r.kills, swap: r.swap });
       if (teamDone(st.pieces, teamOf(c))) st.winner = teamOf(c);
@@ -495,9 +506,9 @@ export function applyAction(st: State, c: Color, a: Action): void {
       const n = hand.length;
       for (const card of hand) st.center.push({ card, hidden: true, by: c });
       st.hands[c] = [];
-      // Enkel een stokje als je je volledige hand (7 kaarten) in één keer afgooit.
-      if (n === 7) st.sticks[c] += 1;
-      pushLog(st, { by: c, kind: 'discardAll', moves: [], kills: [], count: n });
+      const earnsStick = !playedCardThisRound(st, c);
+      if (earnsStick) st.sticks[c] += 1;
+      pushLog(st, { by: c, kind: 'discardAll', moves: [], kills: [], count: n, earnsStick });
       endTurn(st);
       return;
     }
@@ -562,6 +573,7 @@ export function botAction(st: State, c: Color, rng: () => number = Math.random):
     const p = st.pieces.find((x) => x.color === c && x.pos.t === 'kot')!;
     return { type: 'freeExit', piece: p.id };
   }
+  if (!handHasMove(st.pieces, c, hand)) return { type: 'discardAll' };
   const t = teamOf(c);
   let best: { a: Action; s: number } | null = null;
   const seen = new Set<Rank>();

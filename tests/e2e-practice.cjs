@@ -7,7 +7,7 @@ const base = process.argv[4] || 'http://localhost:3100';
 const out = process.env.SHOTS || '/tmp/';
 
 (async () => {
-  const b = await chromium.launch();
+  const b = await chromium.launch(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {});
   const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));

@@ -1,5 +1,5 @@
 // Pro-modus: geen hints. De test berekent zelf een geldige zet met de engine en klikt die,
-// en controleert dat foute zetten en "gelegd is gelegd" geweigerd worden.
+// en controleert dat foute zetten en kaartselectie omkeerbaar blijft.
 // Gebruik: node --experimental-strip-types tests/e2e-pro.mjs [beurten] [url] [modus]
 import { createRequire } from 'node:module';
 const { chromium } = createRequire(import.meta.url)('playwright');
@@ -12,28 +12,26 @@ const out = process.env.SHOTS || '/tmp/';
 
 const holeKey = (pos, color) => (pos.t === 'track' ? `t${pos.i}` : `l${color}-${pos.k}`);
 
-const b = await chromium.launch();
+const b = await chromium.launch(process.env.PLAYWRIGHT_EXECUTABLE_PATH ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } : {});
 const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
 const pageErrors = [];
 p.on('pageerror', (e) => pageErrors.push(e.message));
 await p.goto(`${base}/oefenen?mode=${mode}`, { waitUntil: 'networkidle' });
 
 const st = () => p.evaluate(() => window.__tokken);
-let lastHit = '';
 const clickHole = async (key) => {
   const el = await p.$(`[data-hole="${key}"]`);
   const bb = await el.boundingBox();
-  const x = bb.x + bb.width / 2, y = bb.y + bb.height / 2;
-  lastHit = await p.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); const g = e && e.closest('[data-piece],[data-hole],.hand-bar,.nametag'); return (e ? e.tagName + '.' + (e.getAttribute('class') || '') : 'none') + ' in ' + (g ? (g.getAttribute('data-piece') ?? g.getAttribute('data-hole') ?? g.className) : '-'); }, [x, y]);
-  await p.mouse.click(x, y);
+  await p.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
 };
 const clickPiece = async (id) => {
   const el = await p.$(`[data-piece="${id}"]`);
+  if ((await el.getAttribute('class')).split(' ').includes('sel')) return;
   const bb = await el.boundingBox();
   await p.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
 };
 const clickCard = (id) => p.click(`.hand .pcard >> nth=${id}`);
-const errText = async () => (await p.$('.status .err')) ? p.$eval('.status .err', (e) => e.innerText) : '';
+const errText = async () => (await p.$('.turn-strip .err')) ? p.$eval('.turn-strip .err', (e) => e.innerText) : '';
 const cardIndex = async (s, cardId) => {
   const hand = s.hands[0].slice();
   const order = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'JK'];
@@ -41,11 +39,10 @@ const cardIndex = async (s, cardId) => {
   return hand.findIndex((h) => h.id === cardId);
 };
 
-const stats = { turns: 0, plays: 0, discards: 0, freeExits: 0, illegalRefused: 0, laidRefused: 0, sevens: 0, swaps: 0, problems: [] };
+const stats = { turns: 0, plays: 0, discards: 0, freeExits: 0, illegalRefused: 0, selectionChanges: 0, sevens: 0, swaps: 0, problems: [] };
 
 for (let turn = 0; turn < turns; turn++) {
   await p.waitForFunction(() => (window.__tokken && window.__tokken.turn === 0) || window.__tokken?.winner != null, null, { timeout: 60000 });
-  await p.waitForTimeout(600); // wachten tot de knikkers uitgerold zijn
   let s = await st();
   if (s.winner != null) break;
   stats.turns++;
@@ -80,13 +77,15 @@ for (let turn = 0; turn < turns; turn++) {
     const idx = await cardIndex(s, chosen.card.id);
     await clickCard(idx);
     await p.waitForTimeout(120);
-    // gelegd is gelegd: een andere kaart kiezen moet geweigerd worden
-    const other = s.hands[0].find((h) => h.id !== chosen.card.id && h.rank !== chosen.card.rank);
+    // Selecteren mag de spelstand niet wijzigen; je kunt nog wisselen en annuleren.
+    const other = s.hands[0].find((h) => h.id !== chosen.card.id);
     if (other) {
       await clickCard(await cardIndex(s, other.id));
-      await p.waitForTimeout(80);
-      if ((await errText()).includes('Gelegd')) stats.laidRefused++;
-      else stats.problems.push(`turn ${turn}: laid card not enforced`);
+      if ((await st()).moveNo === s.moveNo) stats.selectionChanges++;
+      else stats.problems.push(`turn ${turn}: selecting changed game state`);
+      await clickCard(await cardIndex(s, other.id));
+      if (await p.$('.hand .pcard.sel')) stats.problems.push(`turn ${turn}: deselect failed`);
+      await clickCard(idx);
     }
     // een foute zet proberen: een pion op een willekeurig fout vakje zetten
     const m = chosen.move;
@@ -99,7 +98,7 @@ for (let turn = 0; turn < turns; turn++) {
         await p.waitForTimeout(80);
         if ((await errText()).includes('mag niet')) stats.illegalRefused++;
         else stats.problems.push(`turn ${turn}: illegal not refused`);
-        if ((await st()).moveNo !== moveNo + 1) stats.problems.push(`turn ${turn}: illegal move changed state`);
+        if ((await st()).moveNo !== s.moveNo) stats.problems.push(`turn ${turn}: illegal move changed state`);
       }
       // de geldige zet
       const color = s.pieces[m.piece].color;
@@ -122,8 +121,8 @@ for (let turn = 0; turn < turns; turn++) {
     }
     await p.waitForTimeout(150);
     const after = await st();
-    if (after.moveNo <= moveNo + 1 && after.turn === 0 && after.winner == null) {
-      stats.problems.push(`turn ${turn}: move ${JSON.stringify(m)} with ${chosen.card.rank} did not go through; err="${await errText()}" hit=${lastHit}`);
+    if (after.moveNo <= s.moveNo && after.turn === 0 && after.winner == null) {
+      stats.problems.push(`turn ${turn}: move ${JSON.stringify(m)} with ${chosen.card.rank} did not go through; err="${await errText()}"`);
       await p.screenshot({ path: `${out}pro-problem-${turn}.png` });
       break;
     }

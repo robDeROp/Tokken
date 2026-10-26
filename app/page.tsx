@@ -2,9 +2,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, setToken, getName, setName } from '@/lib/supabase';
-import { useAuth, GoogleIcon } from '@/lib/auth';
+import type { User } from '@supabase/supabase-js';
+import { sb, api, setToken, getName, setName } from '@/lib/supabase';
 import { useT, LangToggle } from '@/lib/i18n';
+import Scoreboard from '@/components/Scoreboard';
+import { BrandTag, MadeBy } from '@/components/Brand';
 import { COLOR_HEX } from '@/components/Board';
 
 export default function Home() {
@@ -12,11 +14,20 @@ export default function Home() {
   const router = useRouter();
   const [name, setN] = useState('');
   const [code, setCode] = useState('');
-  const { user, required: needLogin, signIn: login, signOut } = useAuth();
+  const [user, setUser] = useState<User | null>(null);
+  const [needLogin, setNeedLogin] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { setN(getName()); }, []);
+  useEffect(() => {
+    setN(getName());
+    const client = sb();
+    client.auth.getUser().then(({ data }) => setUser(data.user ?? null));
+    const { data: sub } = client.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null));
+    client.from('app_config').select('value').eq('key', 'require_login_to_create').maybeSingle()
+      .then(({ data }) => setNeedLogin(data?.value === true));
+    return () => sub.subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (user && !name) setN(String(user.user_metadata?.full_name ?? '').split(' ')[0]);
@@ -48,10 +59,12 @@ export default function Home() {
     } catch (e2) { fail(e2); setBusy(false); }
   };
 
+  const login = () => sb().auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+
   return (
     <main className="shell home">
       <header className="top">
-        <span />
+        <BrandTag />
         <LangToggle />
       </header>
 
@@ -65,6 +78,7 @@ export default function Home() {
             </g>
           ))}
         </svg>
+        <p className="presents">Rob De Rop Digital {t.presents}</p>
         <h1 className="title">Tokken</h1>
         <p className="tagline">{t.tagline}</p>
       </section>
@@ -86,11 +100,11 @@ export default function Home() {
           <h2>{t.newRoom}</h2>
           <p className="muted small">{t.newRoomHelp}</p>
           {user ? (
-            <p className="small">{t.loggedInAs} <strong>{user.email}</strong> · <button className="linkish" onClick={signOut}>{t.logout}</button></p>
+            <p className="small">{t.loggedInAs} <strong>{user.email}</strong> · <button className="linkish" onClick={() => sb().auth.signOut()}>{t.logout}</button></p>
           ) : (
             <>
               <button className="btn google" onClick={login}>
-                <GoogleIcon />
+                <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
                 {t.loginGoogle}
               </button>
               {needLogin && <p className="muted small">{t.loginRequired}</p>}
@@ -116,11 +130,14 @@ export default function Home() {
         </div>
       </section>
 
+      <Scoreboard />
+
       <section className="panel rules-home">
         <h2>{t.rules}</h2>
         <ul>{t.rulesText.map((r, i) => <li key={i}>{r}</li>)}</ul>
       </section>
-      <p className="foot"><Link href="/privacy">Privacy</Link></p>
+
+      <footer className="site-foot"><MadeBy /></footer>
     </main>
   );
 }

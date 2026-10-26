@@ -2,17 +2,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import {
-  movesForRank, sevenNext, applySevenSteps, rankHasMove, handHasMove, needsFreeExit, controlledColor, posEq,
+  playedCardThisRound, movesForRank, sevenNext, applySevenSteps, rankHasMove, handHasMove, needsFreeExit, controlledColor, posEq,
   START,
   type Card, type Color, type Move, type Pos, type PublicState, type Mode,
 } from '@/lib/engine';
 import { sb, api, ApiError, getToken, setToken, getName, setName } from '@/lib/supabase';
 import { useT, LangToggle } from '@/lib/i18n';
-import { useAuth } from '@/lib/auth';
-import { playMarble, playCard, isMuted, setMuted } from '@/lib/sound';
+import { BrandTag, MadeBy } from './Brand';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
-import CardFace, { RANK_ORDER, rankName } from './CardFace';
 import Chat from './Chat';
+import SoundToggle from './SoundToggle';
+import CardFace, { RANK_ORDER, rankName } from './CardFace';
 
 export type Seat = { playerId: string | null; name: string; bot: boolean } | null;
 export interface GameRow {
@@ -30,8 +30,29 @@ export default function Room({ code }: { code: string }) {
   const [online, setOnline] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<string>('');
   const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const activeCode = useRef(code);
+  activeCode.current = code;
+  const latestVersion = useRef(0);
+  const privateVersion = useRef(-1);
+  useEffect(() => { latestVersion.current = Math.max(latestVersion.current, game?.version ?? 0); }, [game?.version]);
+  const accept = useCallback((r: { game?: GameRow; me?: Me | null }) => {
+    if (r.game && r.game.code !== activeCode.current) return;
+    if (r.game) {
+      latestVersion.current = Math.max(latestVersion.current, r.game.version);
+      setGame((g) => !g || r.game!.version >= g.version ? r.game! : g);
+    }
+    if (r.me) {
+      privateVersion.current = Math.max(privateVersion.current, r.me.version);
+      setMe((m) => !m || r.me!.version >= m.version ? r.me! : m);
+    }
+  }, []);
 
-  useEffect(() => { setTok(getToken(code)); }, [code]);
+  useEffect(() => {
+    latestVersion.current = 0; privateVersion.current = -1;
+    setGame(null); setMe(null); setMissing(false); setMsg('');
+    setTok(getToken(code));
+  }, [code]);
 
   // spelstand laden + live volgen
   useEffect(() => {
@@ -41,18 +62,28 @@ export default function Room({ code }: { code: string }) {
       if (!alive) return;
       if (!data) setMissing(true); else setGame(data as GameRow);
     });
+    let connected = false;
+    const refresh = () => {
+      if (document.visibilityState === 'hidden') return;
+      client.from('games').select('*').eq('code', code).maybeSingle().then(({ data }) => {
+        if (alive && data) setGame((g) => !g || data.version > g.version ? data as GameRow : g);
+      });
+    };
+    const timer = setInterval(() => { if (!connected) refresh(); }, 5000);
+    window.addEventListener('focus', refresh);
     const ch = client.channel(`game-${code}`)
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: `code=eq.${code}` }, (payload) => {
         const row = payload.new as GameRow;
         setGame((g) => (!g || row.version >= g.version ? row : g));
       })
       .subscribe((status) => {
+        connected = status === 'SUBSCRIBED';
         // na een herverbinding de laatste stand opnieuw ophalen
         if (status === 'SUBSCRIBED') client.from('games').select('*').eq('code', code).maybeSingle().then(({ data }) => {
           if (alive && data) setGame((g) => (!g || data.version >= g.version ? (data as GameRow) : g));
         });
       });
-    return () => { alive = false; client.removeChannel(ch); };
+    return () => { alive = false; clearInterval(timer); window.removeEventListener('focus', refresh); client.removeChannel(ch); };
   }, [code]);
 
   // wie is er online
@@ -68,9 +99,9 @@ export default function Room({ code }: { code: string }) {
   // mijn kaarten ophalen bij elke verandering
   const version = game?.version;
   useEffect(() => {
-    if (!token || version === undefined) return;
+    if (!token || version === undefined || privateVersion.current >= version) return;
     let alive = true;
-    api<Me>({ op: 'me', code, token }).then((m) => { if (alive) setMe(m); }).catch((e) => {
+    api<Me>({ op: 'me', code, token }).then((m) => { if (alive) { privateVersion.current = Math.max(privateVersion.current, m.version); setMe((prev) => !prev || m.version >= prev.version ? m : prev); } }).catch((e) => {
       if (e instanceof ApiError && e.message === 'not_in_room') { setTok(null); }
     });
     return () => { alive = false; };
@@ -80,20 +111,26 @@ export default function Room({ code }: { code: string }) {
   const pub = game?.state ?? null;
   const botTurn = game?.status === 'playing' && pub && game.seats[pub.turn]?.bot;
   useEffect(() => {
-    if (!botTurn || !token || me?.seat === null || me?.seat === undefined || !game) return;
+    if (!botTurn || !token || !game) return;
     const tm = setTimeout(() => {
-      api({ op: 'botStep', code, token, version: game.version }).catch(() => {});
+      api<{ game?: GameRow; me?: Me }>({ op: 'botStep', code, token, version: game.version }).then(accept).catch(() => {});
     }, 850 + Math.random() * 300);
     return () => clearTimeout(tm);
-  }, [botTurn, token, me?.seat, game, code]);
+  }, [botTurn, token, me?.seat, game, code, accept]);
 
   const call = useCallback(async (body: Record<string, unknown>) => {
-    setBusy(true);
-    setMsg('');
-    try { await api({ code, token, ...body }); }
-    catch (e) { setMsg(t.errors[(e as Error).message] ?? t.errors.server_error); }
-    finally { setBusy(false); }
-  }, [code, token, t]);
+    if (inFlight.current) return;
+    inFlight.current = true; setBusy(true); setMsg('');
+    try {
+      const r = await api<{ game?: GameRow; me?: Me }>({ code, token, ...body,
+        ...(body.op === 'act' ? { version: latestVersion.current } : {}) });
+      accept(r);
+    } catch (e) {
+      setMsg(t.errors[(e as Error).message] ?? t.errors.server_error);
+      const { data } = await sb().from('games').select('*').eq('code', code).maybeSingle();
+      if (data) accept({ game: data as GameRow });
+    } finally { inFlight.current = false; setBusy(false); }
+  }, [code, token, t, accept]);
 
   if (missing) return <Shell><div className="panel narrow"><p>{t.notFound}</p><Link href="/" className="btn">{t.back}</Link></div></Shell>;
   if (!game) return <Shell><div className="panel narrow"><p>{t.loading}</p></div></Shell>;
@@ -101,11 +138,10 @@ export default function Room({ code }: { code: string }) {
 
   const isHost = me?.playerId === game.host_player;
   if (game.status === 'lobby' || !pub) {
-    return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} chat={<Chat code={code} token={token} myId={me?.playerId ?? null} />} /></Shell>;
+    return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} /></Shell>;
   }
   return (
-    <Game game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg}
-      chat={<Chat code={code} token={token} myId={me?.playerId ?? null} />} />
+    <Game chatToken={token} game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg} />
   );
 }
 
@@ -114,9 +150,11 @@ function Shell({ children }: { children: React.ReactNode }) {
     <main className="shell">
       <header className="top">
         <Link href="/" className="logo">Tokken</Link>
+        <BrandTag />
         <LangToggle />
       </header>
       {children}
+      <footer className="site-foot"><MadeBy /></footer>
     </main>
   );
 }
@@ -125,8 +163,7 @@ function JoinBox({ code, onJoined }: { code: string; onJoined: (token: string) =
   const { t } = useT();
   const [name, setN] = useState('');
   const [err, setErr] = useState('');
-  const { user } = useAuth();
-  useEffect(() => setN(getName() || String(user?.user_metadata?.full_name ?? '').split(' ')[0]), [user]);
+  useEffect(() => setN(getName()), []);
   return (
     <form className="panel narrow" onSubmit={async (e) => {
       e.preventDefault();
@@ -145,9 +182,9 @@ function JoinBox({ code, onJoined }: { code: string; onJoined: (token: string) =
   );
 }
 
-function Lobby({ game, me, isHost, online, call, busy, msg, chat }: {
+function Lobby({ game, me, isHost, online, call, busy, msg }: {
   game: GameRow; me: Me | null; isHost: boolean; online: Set<string>;
-  call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string; chat?: React.ReactNode;
+  call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string;
 }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
@@ -208,17 +245,18 @@ function Lobby({ game, me, isHost, online, call, busy, msg, chat }: {
         ) : <p className="muted">{t.waitingHost}</p>}
         {msg && <p className="err">{msg}</p>}
       </section>
-      {chat && <div>{chat}</div>}
     </div>
   );
 }
 
+const lastLogNumber = (pub: PublicState) => pub.log.at(-1)?.n ?? -1;
+
 type Step = { piece: number; to: Pos };
 
-export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chat }: {
+export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken }: {
+  chatToken?: string;
   game: GameRow; pub: PublicState; me: Me | null; isHost: boolean; online: Set<string>;
   call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string; setMsg: (s: string) => void;
-  chat?: React.ReactNode;
 }) {
   const { t, lang } = useT();
   const seat = me?.seat ?? null;
@@ -226,16 +264,29 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const hand = useMemo(() => (me?.hand ?? []).slice().sort((a, b) => RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.suit.localeCompare(b.suit)), [me?.hand]);
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
-  const strict = mode !== 'training';
 
   const [selCard, setSelCard] = useState<number | null>(null);
   const [selPiece, setSelPiece] = useState<number | null>(null);
   const [seven, setSeven] = useState<Step[]>([]);
   const [showDiscard, setShowDiscard] = useState(false);
   const [showRules, setShowRules] = useState(false);
+  const [showControls, setShowControls] = useState(false);
+  const [zoom, setZoom] = useState(1);
+  const logRef = useRef<HTMLOListElement>(null);
+  const followLog = useRef(true);
+  useEffect(() => {
+    const el = logRef.current;
+    if (el && followLog.current) el.scrollTop = el.scrollHeight;
+  }, [lastLogNumber(pub)]);
+  useEffect(() => {
+    if (!showControls) return;
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') setShowControls(false); };
+    window.addEventListener('keydown', closeOnEscape);
+    return () => window.removeEventListener('keydown', closeOnEscape);
+  }, [showControls]);
 
-  // nieuwe zet -> selectie wissen (de gelegde kaart blijft geselecteerd)
-  // (een kaart leggen telt niet als zet: dan blijft alles staan)
+
+  // Nieuwe zet: selectie wissen. Een kaart kiezen blijft volledig lokaal.
   const lastLog = pub.log.length ? pub.log[pub.log.length - 1].n : -1;
   const turnKey = `${pub.round}:${pub.turn}:${lastLog}`;
   const lastTurnKey = useRef(turnKey);
@@ -243,21 +294,9 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
     if (lastTurnKey.current !== turnKey) {
       lastTurnKey.current = turnKey;
       setSelPiece(null); setSeven([]); setShowDiscard(false);
-      setSelCard(pub.laid !== null && pub.turn === seat ? pub.laid : null);
+      setSelCard(null);
     }
   }, [turnKey, pub.laid, pub.turn, seat]);
-  // geluid: knikker op hout bij elke zet, kaartgeluid bij weggooien
-  const [mute, setMute] = useState(false);
-  useEffect(() => { setMute(isMuted()); }, []);
-  const lastEntry = pub.log.length ? pub.log[pub.log.length - 1] : null;
-  const soundRef = useRef<number | null>(lastEntry?.n ?? null);
-  useEffect(() => {
-    if (!lastEntry || soundRef.current === lastEntry.n) return;
-    soundRef.current = lastEntry.n;
-    if (lastEntry.kind === 'play' || lastEntry.kind === 'freeExit') playMarble(lastEntry.kills.length ? 'kill' : 'move', lastEntry.moves.length);
-    else playCard();
-  }, [lastEntry]);
-
   // kaart niet meer in de hand -> weg
   useEffect(() => { if (selCard !== null && !hand.some((h) => h.id === selCard)) setSelCard(null); }, [hand, selCard]);
 
@@ -317,14 +356,11 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
     if (!myTurn || busy) return;
     if (free) { err('free_exit_first'); return; }
     setMsg('');
-    if (strict && pub.laid !== null && pub.laid !== c.id) {
-      const laid = hand.find((h) => h.id === pub.laid);
-      if (laid && seat !== null && rankHasMove(pub.pieces, seat, laid.rank)) { err('card_laid'); return; }
-    }
-    setSeven([]); setSelPiece(null);
-    setSelCard(c.id);
-    playCard();
-    if (strict && pub.laid !== c.id) await call({ op: 'act', action: { type: 'lay', card: c.id } });
+    setSeven([]);
+    const candidates = c.rank === '7' ? sevenNext(pub.pieces, seat!, []) : movesForRank(pub.pieces, seat!, c.rank).map((g) => g.move).filter((m) => m.kind !== 'seven');
+    const ids = new Set(candidates.map((m) => m.piece));
+    setSelPiece(ids.size === 1 && mode !== 'pro' ? [...ids][0] : null);
+    setSelCard(selCard === c.id ? null : c.id);
   };
 
   const tryDest = (pos: Pos, laneColor?: Color): boolean => {
@@ -395,7 +431,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
     let s = '';
     if (e.kind === 'play') s = t.logPlay(nameOf(e.by), rankName(e.rank!, lang));
     else if (e.kind === 'discardOne') s = t.logDiscardOne(nameOf(e.by), rankName(e.rank!, lang));
-    else if (e.kind === 'discardAll') s = t.logDiscardAll(nameOf(e.by));
+    else if (e.kind === 'discardAll') s = t.logDiscardAll(nameOf(e.by), e.earnsStick ?? true);
     else s = t.logFree(nameOf(e.by));
     if (e.swap) s += t.logSwap(colorName(pub.pieces[e.swap[0]].color), colorName(pub.pieces[e.swap[1]].color));
     if (e.kills.length) s += t.logKills(e.kills.map((k) => colorName(pub.pieces[k].color)).join(', '));
@@ -419,26 +455,37 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
 
   return (
     <main className="game">
-      <header className="top">
-        <Link href="/" className="logo">Tokken</Link>
-        <span className="muted small">{t.room} {game.code} · {t.modes[mode]} · {t.round} {pub.round}</span>
-        <div className="top-right">
-          <button className="btn small ghost" aria-label={mute ? t.soundOff : t.soundOn} title={mute ? t.soundOff : t.soundOn}
-            onClick={() => { setMuted(!mute); setMute(!mute); if (mute) playMarble(); }}>{mute ? '🔇' : '🔊'}</button>
-          <button className="btn small ghost" onClick={() => setShowRules((v) => !v)}>{t.rules}</button>
-          <LangToggle />
-        </div>
-      </header>
-
-      <div className="table">
+      <button className="drawer-trigger" aria-label={lang === 'nl' ? 'Instellingen openen' : 'Open settings'} onClick={() => setShowControls(true)}>
+        <span aria-hidden="true">☰</span>
+      </button>
+      {showControls && <>
+        <button className="drawer-scrim" aria-label={lang === 'nl' ? 'Instellingen sluiten' : 'Close settings'} onClick={() => setShowControls(false)} />
+        <aside className="game-drawer" aria-label={lang === 'nl' ? 'Spelinstellingen' : 'Game settings'}>
+          <div className="drawer-heading">
+            <div><Link href="/" className="logo">Tokken</Link><p>{t.room} {game.code}</p></div>
+            <button className="drawer-close" aria-label={lang === 'nl' ? 'Sluiten' : 'Close'} onClick={() => setShowControls(false)}>×</button>
+          </div>
+          <p className="drawer-meta">{t.modes[mode]} · {t.round} {pub.round} · {pub.moveNo} {lang === 'nl' ? 'zetten' : 'moves'}</p>
+          <button className="btn drawer-rules" onClick={() => { setShowRules(true); setShowControls(false); }}>{t.rules}</button>
+          <div className="drawer-control"><span>{lang === 'nl' ? 'Taal' : 'Language'}</span><LangToggle /></div>
+          <label className="drawer-zoom">{t.zoom}<input aria-label={t.zoom} type="range" min="1" max="1.7" step="0.1" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
+          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle last={pub.last} moveNo={lastLogNumber(pub)} /></div>
+          <MadeBy compact />
+        </aside>
+      </>}
+      <div className={`table ${chatToken && me ? 'with-chat' : 'without-chat'}`}>
         <div className="board-wrap">
+          <div className="board-scale" style={{ ['--zoom' as string]: zoom }}>
           <Board
-            pieces={displayPieces} viewer={viewer} turn={pub.winner === null ? pub.turn : null} sticks={pub.sticks}
-            names={game.seats.map((s) => s?.name ?? null)} center={pub.center} laidCard={pub.laidCard}
+            pieces={displayPieces} viewer={viewer} turn={pub.winner === null ? pub.turn : null}
+            turnLabel={pub.winner !== null ? t.win(t.teamNames[pub.winner]) : myTurn ? `${t.yourTurn} · ${busy ? t.saving : hint || t.pickCard}` : t.turnOf(nameOf(pub.turn))}
+            sticks={pub.sticks}
+            names={game.seats.map((s) => s?.name ?? null)} center={pub.center} laidCard={null}
             last={rank === '7' && seven.length ? null : pub.last} lang={lang}
             highlightPieces={hlPieces} highlightHoles={hlHoles} selectedPiece={selPiece} ghosts={ghosts}
             onPiece={onPiece} onHole={onHole}
           />
+          </div>
         </div>
 
         <aside className="side">
@@ -472,12 +519,11 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
             )}
           </div>
 
-          {chat}
-
+          {chatToken && me && <Chat gameId={game.id} code={game.code} token={chatToken} playerId={me.playerId} />}
           <div className="log">
             <h3>{t.log}</h3>
-            <ol>
-              {pub.log.slice(-8).reverse().map((e) => <li key={e.n} style={{ ['--c' as string]: COLOR_HEX[e.by] }}>{logLine(e)}</li>)}
+            <ol ref={logRef} onScroll={(e) => { const el = e.currentTarget; followLog.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
+              {pub.log.map((e) => <li key={e.n} style={{ ['--c' as string]: COLOR_HEX[e.by] }}>{logLine(e)}</li>)}
             </ol>
           </div>
         </aside>
@@ -486,8 +532,6 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
       {seat !== null && (
         <div className="hand-bar">
           <div className="turn-strip">
-            {pub.winner === null && !myTurn && <span>{t.turnOf(nameOf(pub.turn))}</span>}
-            {myTurn && <p className="hint">{t.yourTurn}: {hint}</p>}
             {msg && <p className="err">{msg}</p>}
             {myTurn && rank === '7' && seven.length > 0 && (
               <button className="btn small" onClick={() => setSeven(seven.slice(0, -1))}>{t.undo}</button>
@@ -495,7 +539,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           </div>
           <div className="hand">
             {hand.map((c) => (
-              <CardFace key={c.id} card={c} lang={lang} selected={selCard === c.id} laid={pub.laid === c.id}
+              <CardFace key={c.id} card={c} lang={lang} selected={selCard === c.id} laid={false}
                 dim={mode === 'training' && myTurn && !playable.has(c.id)} onClick={() => pickCard(c)} />
             ))}
             {hand.length === 0 && <span className="muted">—</span>}
@@ -511,7 +555,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
                 <>
                   <button className="btn" disabled={!card || busy} onClick={() => card && call({ op: 'act', action: { type: 'discardOne', card: card.id } })}>{t.discardOne}</button>
                   <button className="btn" disabled={busy} onClick={() => call({ op: 'act', action: { type: 'discardAll' } })}>{t.discardAll}</button>
-                  <p className="small muted">{t.discardHelp}</p>
+                  <p className="small muted">{seat !== null && playedCardThisRound(pub, seat) ? t.discardAllNoStick : t.discardAllHelp}</p>
                 </>
               )}
             </div>

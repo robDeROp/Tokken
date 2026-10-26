@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { newGame, applyAction, botAction, publicView, RuleError, type State, type Mode, type Action } from '@/lib/engine';
 import { useT } from '@/lib/i18n';
-import { getName, api } from '@/lib/supabase';
+import { getName, sb } from '@/lib/supabase';
 import { Game, type GameRow } from './Room';
 
 const clone = (s: State): State => structuredClone(s);
@@ -13,29 +13,55 @@ export default function Practice({ mode }: { mode: Mode }) {
   const [st, setSt] = useState<State | null>(null);
   const [msg, setMsg] = useState('');
   const [myName, setMyName] = useState('');
+  const sessionId = useRef<string | null>(null);
+  const resultRecorded = useRef(false);
   useEffect(() => { setMyName(getName()); }, []);
 
-  useEffect(() => { setSt(newGame(mode)); }, [mode]);
+  useEffect(() => {
+    sessionId.current = crypto.randomUUID();
+    resultRecorded.current = false;
+    setSt(newGame(mode));
+  }, [mode]);
+
+  useEffect(() => {
+    if (!st || st.winner === null || resultRecorded.current || !sessionId.current) return;
+    resultRecorded.current = true;
+    void sb().rpc('record_training_game', { p_game_id: sessionId.current, p_mode: mode })
+      .then(({ error }) => { if (error) console.error('Trainingresultaat opslaan mislukt', error); });
+  }, [st, mode]);
 
   // computers spelen
   useEffect(() => {
     if (!st || st.winner !== null || st.turn === 0) return;
-    const tm = setTimeout(() => {
-      setSt((cur) => {
-        if (!cur || cur.turn === 0 || cur.winner !== null) return cur;
-        const n = clone(cur);
-        const a = botAction(n, n.turn);
-        if (a.type === 'play' && n.mode !== 'training') applyAction(n, n.turn, { type: 'lay', card: a.card });
-        applyAction(n, n.turn, a);
-        return n;
-      });
-    }, 700);
-    return () => clearTimeout(tm);
+    // Bereken de computerzet buiten de UI-thread zodat klikken en chat soepel blijven.
+    const worker = new Worker(new URL('../lib/bot.worker.ts', import.meta.url));
+    const turn = st.turn;
+    const moveNo = st.moveNo;
+    let tm: ReturnType<typeof setTimeout>;
+    worker.onmessage = (event) => {
+      if (!event.data.action) { setMsg(t.errors.server_error); return; }
+      tm = setTimeout(() => {
+        setSt((cur) => {
+          if (!cur || cur.turn !== turn || cur.moveNo !== moveNo || cur.winner !== null) return cur;
+          const n = clone(cur);
+          applyAction(n, turn, event.data.action);
+          return n;
+        });
+      }, 450);
+    };
+    worker.onerror = () => setMsg(t.errors.server_error);
+    worker.postMessage(st);
+    return () => { clearTimeout(tm); worker.terminate(); };
   }, [st]);
 
   const call = useCallback(async (body: Record<string, unknown>) => {
     setMsg('');
-    if (body.op === 'rematch') { setSt(newGame(mode)); return; }
+    if (body.op === 'rematch') {
+      sessionId.current = crypto.randomUUID();
+      resultRecorded.current = false;
+      setSt(newGame(mode));
+      return;
+    }
     if (body.op !== 'act') return;
     setSt((cur) => {
       if (!cur) return cur;
@@ -47,23 +73,6 @@ export default function Practice({ mode }: { mode: Mode }) {
       }
     });
   }, [mode, t]);
-
-  // bijhouden: oefenspel gestart / gedaan (fouten negeren, oefenen werkt ook zonder server)
-  const startedRef = useRef<State | null>(null);
-  const finishedRef = useRef<State | null>(null);
-  const firstRef = useRef<State | null>(null);
-  useEffect(() => {
-    if (!st) return;
-    if (st.moveNo === 0 && startedRef.current !== st) {
-      startedRef.current = st;
-      api({ op: 'track', type: 'practice_started', name: myName || null, data: { mode } }).catch(() => {});
-    }
-    if (!firstRef.current || st.moveNo === 0) firstRef.current = st;
-    if (st.winner !== null && finishedRef.current !== firstRef.current) {
-      finishedRef.current = firstRef.current;
-      api({ op: 'track', type: 'practice_finished', name: myName || null, data: { mode, won: st.winner === 0, rounds: st.round } }).catch(() => {});
-    }
-  }, [st, mode, myName]);
 
   // voor de automatische tests
   useEffect(() => { (window as unknown as { __tokken?: State | null }).__tokken = st; }, [st]);

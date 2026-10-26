@@ -64,7 +64,7 @@ function who(s: SecretRow, token: unknown): string {
 const NOOP = Symbol('noop');
 
 /** Schrijf terug met versiecontrole; bij een botsing opnieuw proberen. */
-async function mutate(code: string, fn: (g: GameRow, s: SecretRow) => unknown | Promise<unknown>) {
+async function mutate(code: string, responseToken: string, fn: (g: GameRow, s: SecretRow) => unknown | Promise<unknown>) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const { g, s } = await load(code);
     const before = g.version;
@@ -76,7 +76,11 @@ async function mutate(code: string, fn: (g: GameRow, s: SecretRow) => unknown | 
       p_seats: g.seats, p_state: g.state, p_tokens: s.tokens, p_full: s.full_state,
     });
     if (error) throw error;
-    if (data === true) return result;
+    if (data === true) {
+      const pid = s.tokens[responseToken];
+      const seat = pid ? seatOf(g, pid) : null;
+      return { game: { ...g, version: before + 1 }, me: pid ? { playerId: pid, seat, hand: seat !== null && s.full_state ? s.full_state.hands[seat] : [], version: before + 1 } : null };
+    }
   }
   throw new HttpError(409, 'busy');
 }
@@ -94,28 +98,6 @@ async function userFromAuth(req: Request) {
   return data.user ?? null;
 }
 
-type AuthUser = { id: string; email?: string; user_metadata?: Record<string, unknown> } | null;
-
-/** Aanmelden verplicht? (app_config.require_login) */
-async function requireUser(req: Request): Promise<AuthUser> {
-  const user = await userFromAuth(req);
-  const { data: cfg } = await db.from('app_config').select('value').eq('key', 'require_login').maybeSingle();
-  if (cfg?.value === true && !user) throw new HttpError(401, 'login_required');
-  return user;
-}
-
-/** Bijhouden wat er gebeurt (tabel events). Fouten hier mogen het spel nooit breken. */
-async function track(type: string, code: string | null, user: AuthUser, name: string | null, data: Record<string, unknown> = {}) {
-  try {
-    await db.from('events').insert({
-      type, code, user_id: user?.id ?? null, email: user?.email ?? null,
-      name: name ?? (user?.user_metadata?.full_name as string | undefined) ?? null, data,
-    });
-  } catch (e) { console.error('track', e); }
-}
-
-const PRACTICE_EVENTS = ['practice_started', 'practice_finished'];
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -124,7 +106,9 @@ Deno.serve(async (req) => {
     const code = String(body.code ?? '').toUpperCase();
 
     if (op === 'create') {
-      const user = await requireUser(req);
+      const user = await userFromAuth(req);
+      const { data: cfg } = await db.from('app_config').select('value').eq('key', 'require_login_to_create').maybeSingle();
+      if (cfg?.value === true && !user) throw new HttpError(401, 'login_required');
       const name = cleanName(body.name ?? user?.user_metadata?.full_name);
       const playerId = rid(10);
       const token = rid(32);
@@ -140,31 +124,31 @@ Deno.serve(async (req) => {
       }).select('id').single();
       if (error) throw error;
       await db.from('game_secrets').insert({ game_id: g.id, tokens: { [token]: playerId }, host_user: user?.id ?? null });
-      await track('room_created', newCode, user, name, { mode });
       return json({ code: newCode, token, playerId });
     }
 
-    if (op === 'track') {
-      const user = await requireUser(req);
-      const type = String(body.type);
-      if (!PRACTICE_EVENTS.includes(type)) throw new HttpError(400, 'bad_event');
-      const data = typeof body.data === 'object' && body.data ? body.data : {};
-      await track(type, null, user, cleanName(body.name ?? user?.user_metadata?.full_name), data);
-      return json({ ok: true });
-    }
-
     if (op === 'join') {
-      const user = await requireUser(req);
-      const name = cleanName(body.name ?? user?.user_metadata?.full_name);
+      const name = cleanName(body.name);
       const playerId = rid(10);
       const token = rid(32);
-      await mutate(code, (g, s) => {
+      const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         if (g.players.length >= 12) throw new HttpError(400, 'room_full');
         g.players.push({ id: playerId, name });
         s.tokens[token] = playerId;
       });
-      await track('room_joined', code, user, name);
       return json({ code, token, playerId });
+    }
+
+    if (op === 'chat') {
+      const { g, s } = await load(code);
+      const pid = who(s, body.token);
+      const text = String(body.text ?? '').trim().slice(0, 300);
+      if (!text) throw new HttpError(400, 'empty');
+      const seat = seatOf(g, pid);
+      const name = g.players.find((p) => p.id === pid)?.name ?? 'Speler';
+      const { data, error } = await db.from('chat_messages').insert({ code, player_id: pid, name, color: seat, text }).select().single();
+      if (error) throw error;
+      return json(data);
     }
 
     if (op === 'me') {
@@ -175,32 +159,19 @@ Deno.serve(async (req) => {
       return json({ playerId: pid, seat, hand, version: g.version });
     }
 
-    if (op === 'chat') {
-      const { g, s } = await load(code);
-      const pid = who(s, body.token);
-      const text = String(body.text ?? '').trim().slice(0, 300);
-      if (!text) throw new HttpError(400, 'empty');
-      const seat = seatOf(g, pid);
-      const name = g.players.find((x) => x.id === pid)?.name ?? 'Speler';
-      const { error } = await db.from('chat_messages').insert({ code, player_id: pid, name, color: seat, text });
-      if (error) throw error;
-      return json({ ok: true });
-    }
-
     if (op === 'rename') {
-      await mutate(code, (g, s) => {
+      const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         const pid = who(s, body.token);
         const name = cleanName(body.name);
         const p = g.players.find((x) => x.id === pid);
         if (p) p.name = name;
         for (const seat of g.seats) if (seat && seat.playerId === pid) seat.name = name;
       });
-      return json({ ok: true });
+      return json(snapshot === NOOP ? { ok: true } : snapshot);
     }
 
-    let started: Record<string, unknown> | null = null;
     if (op === 'sit' || op === 'stand' || op === 'addBot' || op === 'removeBot' || op === 'setMode' || op === 'start' || op === 'rematch') {
-      await mutate(code, (g, s) => {
+      const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         const pid = who(s, body.token);
         const isHost = pid === g.host_player;
         const seat = Number(body.seat);
@@ -236,16 +207,13 @@ Deno.serve(async (req) => {
           s.full_state = st;
           g.state = publicView(st);
           g.status = 'playing';
-          started = { mode: g.mode, players: g.seats.map((x) => (x?.bot ? 'computer' : x?.name)) };
         }
       });
-      if (started) await track('game_started', code, await userFromAuth(req), null, started);
-      return json({ ok: true });
+      return json(snapshot === NOOP ? { ok: true } : snapshot);
     }
 
-    let finished: Record<string, unknown> | null = null;
     if (op === 'act' || op === 'botStep') {
-      await mutate(code, (g, s) => {
+      const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         if (g.status !== 'playing' || !s.full_state) throw new HttpError(400, 'not_playing');
         const st = s.full_state;
         let seat: Color;
@@ -255,6 +223,7 @@ Deno.serve(async (req) => {
           const me = seatOf(g, pid);
           if (me === null) throw new HttpError(403, 'not_seated');
           seat = me;
+          if (body.version !== undefined && Number(body.version) !== g.version) throw new HttpError(409, 'stale_state');
           action = body.action as Action;
         } else {
           who(s, body.token); // enkel mensen in de kamer mogen de computer laten spelen
@@ -262,7 +231,6 @@ Deno.serve(async (req) => {
           // al gespeeld door iemand anders? (meerdere browsers kunnen tegelijk vragen)
           if (Number(body.version) !== g.version || !g.seats[seat]?.bot || st.winner !== null) return NOOP;
           action = botAction(st, seat, rng);
-          if (action.type === 'play' && st.mode !== 'training') applyAction(st, seat, { type: 'lay', card: action.card });
         }
         try {
           applyAction(st, seat, action);
@@ -271,16 +239,9 @@ Deno.serve(async (req) => {
           throw e;
         }
         g.state = publicView(st);
-        if (st.winner !== null) {
-          g.status = 'finished';
-          finished = {
-            winner: st.winner === 0 ? 'geel+oranje' : 'blauw+groen', rounds: st.round, moves: st.moveNo, mode: st.mode,
-            players: g.seats.map((x) => (x?.bot ? 'computer' : x?.name)),
-          };
-        }
+        if (st.winner !== null) g.status = 'finished';
       });
-      if (finished) await track('game_finished', code, null, null, finished);
-      return json({ ok: true });
+      return json(snapshot === NOOP ? { ok: true } : snapshot);
     }
 
     throw new HttpError(400, 'bad_op');

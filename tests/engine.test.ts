@@ -162,7 +162,7 @@ test('stokjes: alles afgooien geeft stokje, 2 stokjes = gratis buiten en dan kaa
   const st = newGame('pro', mulberry(3));
   st.pieces = emptyPieces();
   st.turn = 0;
-  st.hands[0] = [900, 901, 903, 904, 905, 906, 907].map((id) => ({ id, rank: '2' as const, suit: 'S' as const }));
+  st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }, { id: 901, rank: '3', suit: 'S' }];
   st.sticks[0] = 1;
   assert.throws(() => applyAction(st, 0, { type: 'play', card: 900, move: { kind: 'step', piece: 0, to: tr(2) } }), RuleError);
   applyAction(st, 0, { type: 'discardAll' });
@@ -177,28 +177,52 @@ test('stokjes: alles afgooien geeft stokje, 2 stokjes = gratis buiten en dan kaa
   applyAction(st, 0, { type: 'play', card: 902, move: { kind: 'step', piece: 0, to: tr(2) } });
 });
 
-test('stokje enkel bij 7 kaarten afgooien', () => {
-  const st = newGame('pro', mulberry(8));
+test('na drie kaartzetten alles afgooien geeft geen stokje', () => {
+  const st = newGame('pro', mulberry(31));
   st.pieces = emptyPieces();
+  st.pieces[4].pos = tr(START(1)); // blokkeert de gele pion als die de ronde passeert
   st.turn = 0;
-  st.hands[0] = [2, 3, 6, 8, 9].map((v, i) => ({ id: 800 + i, rank: String(v) as '2', suit: 'S' as const }));
+  st.hands[0] = [
+    { id: 900, rank: 'A', suit: 'S' },
+    { id: 901, rank: '2', suit: 'S' },
+    { id: 902, rank: '3', suit: 'S' },
+    { id: 903, rank: 'JK', suit: 'X' },
+  ];
+  applyAction(st, 0, { type: 'play', card: 900, move: { kind: 'out', piece: 0 } });
+  st.turn = 0;
+  applyAction(st, 0, { type: 'play', card: 901, move: { kind: 'step', piece: 0, to: tr(2) } });
+  st.turn = 0;
+  applyAction(st, 0, { type: 'play', card: 902, move: { kind: 'step', piece: 0, to: tr(5) } });
+  st.turn = 0;
+  assert.equal(handHasMove(st.pieces, 0, st.hands[0]), false);
   applyAction(st, 0, { type: 'discardAll' });
   assert.equal(st.sticks[0], 0);
-  st.turn = 0;
-  st.hands[0] = [2, 3, 6, 8, 9, 10, 2].map((v, i) => ({ id: 810 + i, rank: String(v) as '2', suit: 'S' as const }));
-  applyAction(st, 0, { type: 'discardAll' });
-  assert.equal(st.sticks[0], 1);
+  assert.equal(st.log.at(-1)?.kind, 'discardAll');
+  assert.equal((st.log.at(-1) as { earnsStick?: boolean }).earnsStick, false);
 });
 
-test('gelegd is gelegd (pro)', () => {
+test('gestarte partij reconstrueert rondegeschiedenis', () => {
+  const st = newGame('training', mulberry(32));
+  st.pieces = emptyPieces(); st.pieces[0].pos = tr(5); st.pieces[4].pos = tr(START(1)); st.turn = 0;
+  st.hands[0] = [{ id: 901, rank: 'JK', suit: 'X' }];
+  st.log.push({ by: 0, kind: 'play', round: st.round, n: 1, rank: '3', moves: [], kills: [] });
+  delete (st as Partial<State>).playedThisRound;
+  applyAction(st, 0, { type: 'discardAll' });
+  assert.equal(st.sticks[0], 0);
+  assert.equal(st.playedThisRound[0], true);
+});
+
+test('kaartselectie is omkeerbaar tot de knikker verplaatst (pro)', () => {
   const st = newGame('pro', mulberry(4));
   st.pieces = emptyPieces();
   st.pieces[0].pos = tr(10);
   st.turn = 0;
   st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }, { id: 901, rank: '3', suit: 'S' }];
   applyAction(st, 0, { type: 'lay', card: 900 });
-  assert.throws(() => applyAction(st, 0, { type: 'play', card: 901, move: { kind: 'step', piece: 0, to: tr(13) } }), /card_laid/);
-  applyAction(st, 0, { type: 'play', card: 900, move: { kind: 'step', piece: 0, to: tr(12) } });
+  applyAction(st, 0, { type: 'lay', card: 901 });
+  applyAction(st, 0, { type: 'play', card: 901, move: { kind: 'step', piece: 0, to: tr(13) } });
+  assert.equal(st.hands[0].some((c) => c.id === 900), true);
+  assert.deepEqual(st.pieces[0].pos, tr(13));
 });
 
 test('moet spelen als het kan', () => {
@@ -209,6 +233,55 @@ test('moet spelen als het kan', () => {
   st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }];
   assert.throws(() => applyAction(st, 0, { type: 'discardOne', card: 900 }), /must_play/);
   assert.ok(handHasMove(st.pieces, 0, st.hands[0]));
+});
+
+test('alleen in huisje schuiven mag toch alles afgooien voor stokje', () => {
+  for (const rank of ['2', '3'] as const) {
+    const st = newGame('pro', mulberry(70));
+    st.pieces = emptyPieces();
+    st.pieces[0].pos = ln(0);
+    st.turn = 0;
+    st.hands[0] = [{ id: 900, rank, suit: 'S' }];
+    assert.ok(movesForRank(st.pieces, 0, rank).length > 0);
+    assert.equal(handHasMove(st.pieces, 0, st.hands[0]), false);
+    applyAction(st, 0, { type: 'discardAll' });
+    assert.equal(st.sticks[0], 1);
+  }
+});
+
+test('huisjezet mag vrijwillig, ingang vanaf parcours verplicht spelen', () => {
+  const st = newGame('training', mulberry(71));
+  st.pieces = emptyPieces(); st.turn = 0;
+  st.pieces[0].pos = ln(0);
+  st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }];
+  applyAction(st, 0, { type: 'play', card: 900, move: { kind: 'step', piece: 0, to: ln(2) } });
+  assert.deepEqual(st.pieces[0].pos, ln(2));
+  const P = emptyPieces(); P[0].pos = tr(ENTRY(0));
+  assert.equal(handHasMove(P, 0, [{ id: 900, rank: '2', suit: 'S' }]), true);
+});
+
+test('5 kan spelen met andere kleur, ook als eigen knikkers in kot zitten', () => {
+  const P = emptyPieces(); P[4].pos = tr(25);
+  assert.ok(handHasMove(P, 0, [{ id: 900, rank: '5', suit: 'S' }]));
+  P[4].pos = tr(START(1));
+  assert.equal(handHasMove(P, 0, [{ id: 900, rank: '5', suit: 'S' }]), false);
+});
+
+test('7 alleen binnen huisjes telt niet; 7 met parcours wel', () => {
+  const P = emptyPieces(); P[0].pos = ln(0); P[1].pos = ln(1); P[2].pos = ln(2);
+  const hand = [{ id: 900, rank: '7' as const, suit: 'S' as const }];
+  assert.equal(handHasMove(P, 0, hand), false);
+  P[3].pos = tr(4);
+  assert.ok(handHasMove(P, 0, hand));
+});
+
+test('gratis buiten en kaart hebben unieke lognummers', () => {
+  const st = newGame('training', mulberry(72));
+  st.pieces = emptyPieces(); st.turn = 0; st.sticks[0] = 2;
+  st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }];
+  applyAction(st, 0, { type: 'freeExit', piece: 0 });
+  applyAction(st, 0, { type: 'play', card: 900, move: { kind: 'step', piece: 0, to: tr(2) } });
+  assert.equal(new Set(st.log.map((e) => e.n)).size, st.log.length);
 });
 
 // --- simulatie van volledige spellen met computerspelers ---
@@ -238,7 +311,6 @@ test('100 volledige computerspellen', () => {
     while (st.winner === null && guard++ < 5000) {
       const c = st.turn;
       const a = botAction(st, c, rng);
-      if (a.type === 'play' && st.mode !== 'training') applyAction(st, c, { type: 'lay', card: a.card });
       applyAction(st, c, a);
       checkInvariants(st);
     }

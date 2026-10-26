@@ -1,71 +1,75 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { sb, api } from '@/lib/supabase';
+import { api, sb } from '@/lib/supabase';
 import { useT } from '@/lib/i18n';
-import { COLOR_HEX } from './Board';
 
-interface Msg { id: number; at: string; player_id: string; name: string; color: number | null; text: string }
-
-export default function Chat({ code, token, myId }: { code: string; token: string | null; myId: string | null }) {
-  const { t } = useT();
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [text, setText] = useState('');
-  const [open, setOpen] = useState(false);
-  const [unread, setUnread] = useState(0);
-  const listRef = useRef<HTMLDivElement>(null);
-  const openRef = useRef(open);
-  openRef.current = open;
-
+type Message = { id: number; player_id: string; name: string; color: number | null; text: string; at: string };
+export default function Chat({ gameId, code, token, playerId }: { gameId: string; code: string; token: string; playerId: string }) {
+  const { lang } = useT();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [draft, setDraft] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState('');
+  const list = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
+  const sendingRef = useRef(false);
   useEffect(() => {
-    const client = sb();
     let alive = true;
-    client.from('chat_messages').select('*').eq('code', code).order('id', { ascending: false }).limit(60)
-      .then(({ data }) => { if (alive && data) setMsgs((data as Msg[]).reverse()); });
-    const ch = client.channel(`chat-${code}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `code=eq.${code}` }, (payload) => {
-        const m = payload.new as Msg;
-        setMsgs((cur) => (cur.some((x) => x.id === m.id) ? cur : [...cur.slice(-80), m]));
-        if (!openRef.current && m.player_id !== myId) setUnread((u) => u + 1);
-      })
-      .subscribe();
-    return () => { alive = false; client.removeChannel(ch); };
-  }, [code, myId]);
-
-  useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [msgs, open]);
-  useEffect(() => { if (open) setUnread(0); }, [open]);
-
-  const send = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const v = text.trim();
-    if (!v || !token) return;
-    setText('');
-    try { await api({ op: 'chat', code, token, text: v }); } catch { setText(v); }
-  };
-
-  return (
-    <div className={`chat ${open ? 'open' : ''}`}>
-      <button className="chat-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
-        <span>{t.chat}</span>
-        {unread > 0 && <span className="badge">{unread}</span>}
-        <span className="chev" aria-hidden>{open ? '▾' : '▴'}</span>
-      </button>
-      {open && (
-        <div className="chat-body">
-          <div className="chat-list" ref={listRef}>
-            {msgs.length === 0 && <p className="muted small">{t.chatEmpty}</p>}
-            {msgs.map((m) => (
-              <div key={m.id} className={`msg ${m.player_id === myId ? 'me' : ''}`}>
-                <span className="who" style={{ color: m.color !== null ? COLOR_HEX[m.color] : undefined }}>{m.name}</span>
-                <span className="txt">{m.text}</span>
-              </div>
-            ))}
-          </div>
-          <form className="chat-form" onSubmit={send}>
-            <input value={text} onChange={(e) => setText(e.target.value)} maxLength={300} placeholder={t.chatPlaceholder} disabled={!token} />
-            <button className="btn small primary" type="submit" disabled={!text.trim()}>{t.send}</button>
-          </form>
-        </div>
-      )}
+    let loading = false;
+    let reload = false;
+    const load = async () => {
+      if (loading) { reload = true; return; }
+      loading = true;
+      const { data, error } = await sb().from('chat_messages').select('id,player_id,name,color,text,at')
+        .eq('code', code).order('at', { ascending: false }).order('id', { ascending: false }).limit(100);
+      loading = false;
+      if (!alive) return;
+      if (error) setError(lang === 'nl' ? 'Chat niet bereikbaar. We proberen opnieuw.' : 'Chat unavailable. Retrying.');
+      else {
+        setMessages((prev) => {
+          const merged = new Map([...prev, ...(data ?? [])].map((m) => [m.id, m]));
+          return [...merged.values()].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id).slice(-100);
+        });
+        setError('');
+      }
+      if (reload) { reload = false; void load(); }
+    };
+    void load();
+    const ch = sb().channel(`chat-${gameId}`).on('postgres_changes', {
+      event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `code=eq.${code}`,
+    }, () => { void load(); }).subscribe((status) => { if (status === 'SUBSCRIBED') void load(); });
+    const timer = setInterval(() => { void load(); }, 10000);
+    return () => { alive = false; clearInterval(timer); void sb().removeChannel(ch); };
+  }, [gameId, code, lang]);
+  useEffect(() => {
+    if (follow.current && list.current) list.current.scrollTop = list.current.scrollHeight;
+  }, [messages]);
+  return <div className="chat">
+    <h3>Chat <span className="muted small">· live</span></h3>
+    <div className="chat-messages" ref={list} role="log" aria-live="polite" aria-label="Chat"
+      onScroll={(e) => { const el = e.currentTarget; follow.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40; }}>
+      {!messages.length && <p className="muted small">{lang === 'nl' ? 'Zeg iets tegen je tafelgenoten.' : 'Say hello to your table.'}</p>}
+      {messages.map((m) => <div key={m.id} className={`chat-message ${m.player_id === playerId ? 'own' : ''}`}>
+        <div><strong>{m.name}</strong> <time>{new Date(m.at).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })}</time></div>
+        <p>{m.text}</p>
+      </div>)}
     </div>
-  );
+    <form onSubmit={async (e) => {
+      e.preventDefault();
+      const text = draft.trim();
+      if (!text || sendingRef.current) return;
+      sendingRef.current = true; setSending(true); setError('');
+      try {
+        const message = await api<Message>({ op: 'chat', code, token, text });
+        follow.current = true;
+        setMessages((prev) => [...prev.filter((m) => m.id !== message.id), message].sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id).slice(-100));
+        setDraft('');
+      } catch { setError(lang === 'nl' ? 'Bericht niet verstuurd. Probeer opnieuw.' : 'Message not sent. Try again.'); }
+      finally { sendingRef.current = false; setSending(false); }
+    }}>
+      <input aria-label={lang === 'nl' ? 'Chatbericht' : 'Chat message'} placeholder={lang === 'nl' ? 'Typ een bericht…' : 'Type a message…'} value={draft} maxLength={300} disabled={sending} onChange={(e) => setDraft(e.target.value)} />
+      <button className="btn small" disabled={sending || !draft.trim()}>{sending ? '…' : lang === 'nl' ? 'Stuur' : 'Send'}</button>
+    </form>
+    {error && <p className="err small" role="alert">{error}</p>}
+  </div>;
 }
