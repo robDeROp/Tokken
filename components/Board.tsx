@@ -1,7 +1,9 @@
 'use client';
-import { useMemo } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, TRACK, START, type Color, type Piece, type Pos, type CenterCard, type LastMove, type Card } from '@/lib/engine';
-import { trackXY, laneXY, kotXY, stickXY, trackLabelXY, laneLabelXY, rot, type XY } from '@/lib/board';
+import { trackXY, laneXY, kotXY, stickXY, trackLabelXY, laneLabelXY, rot, planMove, type XY } from '@/lib/board';
+import { getSpeed, onSpeedChange, type Speed } from '@/lib/prefs';
+import { installUnlock, playMove, playWin, playYourTurn } from '@/lib/sound';
 import { rankLabel, SUIT } from './CardFace';
 import type { Lang } from '@/lib/i18n';
 
@@ -29,7 +31,16 @@ interface Props {
   ghosts?: { from: Pos; color: Color }[];
   onPiece?: (id: number) => void;
   onHole?: (h: HoleRef) => void;
+  /** oplopend nummer van de laatste zet; een nieuw nummer start animatie + geluid */
+  moveKey?: number;
+  winner?: number | null;
+  /** jouw stoel (voor het belletje als je aan de beurt komt) */
+  mySeat?: Color | null;
 }
+
+type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number };
+let fxId = 0;
+const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
 function cardRot(id: number) {
   return ((id * 47) % 31) - 15;
@@ -54,6 +65,138 @@ export default function Board(p: Props) {
     if (pc.pos.t === 'lane') return V(laneXY(pc.color, pc.pos.k));
     return V(kotXY(pc.color, kotSlots.get(pc.id) ?? 0));
   };
+
+  // ---------- animaties en geluid ----------
+  const els = useRef(new Map<number, SVGGElement>());
+  const inner = useRef(new Map<number, SVGGElement>());
+  const lastCard = useRef<SVGGElement>(null);
+  const prevXY = useRef<Map<number, XY> | null>(null);
+  const prevPieces = useRef<Piece[] | null>(null);
+  const prevKey = useRef<number | undefined>(undefined);
+  const prevWinner = useRef(p.winner ?? null);
+  const prevTurn = useRef(p.turn);
+  const [fx, setFx] = useState<Fx[]>([]);
+  const speed = useRef<Speed>('normal');
+  useEffect(() => { installUnlock(); speed.current = getSpeed(); return onSpeedChange((v) => { speed.current = v; }); }, []);
+
+  const addFx = (items: Omit<Fx, 'id'>[], life: number) => {
+    if (!items.length) return;
+    const withId = items.map((f) => ({ ...f, id: ++fxId }));
+    setFx((cur) => [...cur, ...withId]);
+    const ids = new Set(withId.map((f) => f.id));
+    setTimeout(() => setFx((cur) => cur.filter((f) => !ids.has(f.id))), life);
+  };
+
+  useLayoutEffect(() => {
+    const now = new Map(p.pieces.map((pc) => [pc.id, pieceXY(pc)] as [number, XY]));
+    const before = prevXY.current, beforePieces = prevPieces.current;
+    prevXY.current = now; prevPieces.current = p.pieces;
+    const isNew = p.moveKey !== undefined && prevKey.current !== undefined && p.moveKey > prevKey.current && !!p.last;
+    if (p.moveKey !== undefined) prevKey.current = p.moveKey;
+    if (!before) return;
+    const still = reducedMotion();
+    const handled = new Set<number>();
+    const items: Omit<Fx, 'id'>[] = [];
+
+    if (isNew && p.last) {
+      const slotsPrev = new Map<number, number>();
+      if (beforePieces) for (const c of COLORS) { let k = 0; for (const pc of beforePieces) if (pc.color === c && pc.pos.t === 'kot') slotsPrev.set(pc.id, k++); }
+      const plan = planMove(p.last, p.pieces, beforePieces, (id) => kotSlots.get(id) ?? 0, (id) => slotsPrev.get(id) ?? 0, speed.current);
+      playMove(p.last, plan, p.mySeat ?? null);
+      if (!still) {
+        // kaart vliegt vanaf de speler naar het midden
+        if (lastCard.current && p.last.kind !== 'freeExit') {
+          const [sx, sy] = V(rot([0, 330], p.last.by));
+          lastCard.current.animate([
+            { transform: `translate(${sx}px, ${sy}px) scale(.55) rotate(${p.last.by % 2 ? 90 : -25}deg)`, opacity: 0.4 },
+            { transform: 'translate(0px, 0px) scale(1.06) rotate(0deg)', opacity: 1, offset: 0.8 },
+            { transform: 'translate(0px, 0px) scale(1) rotate(0deg)', opacity: 1 },
+          ], { duration: 260, easing: 'cubic-bezier(.2,.8,.3,1)' });
+        }
+        for (const s of plan.segs) {
+          const el = els.current.get(s.piece), inn = inner.current.get(s.piece);
+          const was = before.get(s.piece), is = now.get(s.piece);
+          if (!el || !was || !is) continue;
+          handled.add(s.piece);
+          if (Math.hypot(was[0] - is[0], was[1] - is[1]) < 1) continue; // al zo getoond (7 splitsen)
+          const pts = s.pts.map(V);
+          pts[0] = was; pts[pts.length - 1] = is;
+          let frames: Keyframe[];
+          if (s.kind === 'exit' || s.kind === 'swap') {
+            const mx = (pts[0][0] + is[0]) / 2, my = (pts[0][1] + is[1]) / 2;
+            const lift = s.kind === 'exit' ? 0.82 : 0.9; // boog richting het midden
+            frames = [{ transform: `translate(${pts[0][0]}px, ${pts[0][1]}px)` }, { transform: `translate(${mx * lift}px, ${my * lift}px)` }, { transform: `translate(${is[0]}px, ${is[1]}px)` }];
+            inn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.32)' }, { transform: 'scale(1)' }], { duration: s.dur, delay: s.delay, easing: 'ease-in-out' });
+          } else if (plan.hop) {
+            // gaatje per gaatje huppen: elke sprong apart versneld/vertraagd, en even optillen
+            frames = pts.map(([x, y]) => ({ transform: `translate(${x}px, ${y}px)`, easing: 'cubic-bezier(.45,0,.55,1)' }));
+            const n = pts.length - 1, lift: Keyframe[] = [];
+            for (let k = 0; k < n; k++) {
+              lift.push({ transform: 'scale(1)', offset: k / n });
+              lift.push({ transform: 'scale(1.2)', offset: (k + 0.5) / n });
+            }
+            lift.push({ transform: 'scale(1)', offset: 1 });
+            inn?.animate(lift, { duration: s.dur, delay: s.delay });
+            for (let k = 1; k < n; k++) items.push({ kind: 'ripple', x: pts[k][0], y: pts[k][1], color: s.color, delay: s.delay + (k * s.dur) / n, r: 0.65 });
+          } else {
+            frames = pts.map(([x, y]) => ({ transform: `translate(${x}px, ${y}px)` }));
+          }
+          el.animate(frames, { duration: s.dur, delay: s.delay, easing: s.kind === 'exit' || s.kind === 'swap' ? 'cubic-bezier(.35,0,.25,1)' : plan.hop ? 'linear' : 'cubic-bezier(.3,.05,.45,1)', fill: 'backwards' });
+          inn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.14, .86)', offset: 0.35 }, { transform: 'scale(.95, 1.05)', offset: 0.7 }, { transform: 'scale(1)' }],
+            { duration: 220, delay: s.delay + s.dur });
+          items.push({ kind: s.kind === 'home' ? 'home' : 'ripple', x: is[0], y: is[1], color: s.color, delay: s.delay + s.dur });
+          if (s.kind === 'home') for (let k = 0; k < 6; k++) {
+            const a = (k / 6) * Math.PI * 2 - Math.PI / 2, d = 30 + (k % 2) * 8;
+            items.push({ kind: 'spark', x: is[0] + Math.cos(a) * d, y: is[1] + Math.sin(a) * d, color: s.color, delay: s.delay + s.dur + 80 + k * 45 });
+          }
+          if (s.kind === 'exit') items.push({ kind: 'dust', x: pts[0][0], y: pts[0][1], color: s.color, delay: s.delay });
+        }
+        for (const k of plan.kills) {
+          const el = els.current.get(k.piece), inn = inner.current.get(k.piece);
+          const was = before.get(k.piece), is = now.get(k.piece);
+          if (!el || !was || !is) continue;
+          handled.add(k.piece);
+          if (Math.hypot(was[0] - is[0], was[1] - is[1]) < 1) continue;
+          const mx = (was[0] + is[0]) / 2 * 1.12, my = (was[1] + is[1]) / 2 * 1.12;
+          el.animate([{ transform: `translate(${was[0]}px, ${was[1]}px)` }, { transform: `translate(${mx}px, ${my}px)`, offset: 0.45 }, { transform: `translate(${is[0]}px, ${is[1]}px)` }],
+            { duration: plan.killMs, delay: k.delay, easing: 'cubic-bezier(.2,.6,.35,1)', fill: 'backwards' });
+          inn?.animate([{ transform: 'scale(1) rotate(0deg)' }, { transform: 'scale(1.35) rotate(300deg)', offset: 0.45 }, { transform: 'scale(1) rotate(620deg)' }], { duration: plan.killMs, delay: k.delay, easing: 'ease-out' });
+          const by = p.last.by as Color;
+          for (let i = 0; i < 9; i++) {
+            const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5, d = 34 + Math.random() * 26;
+            items.push({ kind: 'splinter', x: was[0], y: was[1], color: i % 3 ? by : k.color, delay: k.delay, dx: Math.cos(a) * d, dy: Math.sin(a) * d, r: (a * 180) / Math.PI });
+          }
+          items.push({ kind: 'ripple', x: was[0], y: was[1], color: by, delay: k.delay, r: 1.6 });
+        }
+      }
+    }
+    // overige verplaatsingen (7 splitsen, herladen): kort glijden
+    if (!still) for (const [id, is] of now) {
+      if (handled.has(id)) continue;
+      const was = before.get(id);
+      if (!was || Math.hypot(was[0] - is[0], was[1] - is[1]) < 1) continue;
+      els.current.get(id)?.animate([{ transform: `translate(${was[0]}px, ${was[1]}px)` }, { transform: `translate(${is[0]}px, ${is[1]}px)` }], { duration: 170, easing: 'ease-out' });
+    }
+
+    // winst
+    const w = p.winner ?? null;
+    if (w !== null && prevWinner.current === null) {
+      playWin(p.mySeat == null ? true : p.mySeat % 2 === w);
+      if (!still) for (let i = 0; i < 46; i++) {
+        const c = ((w + (i % 2) * 2) % 4) as Color;
+        items.push({ kind: 'confetti', x: -480 + Math.random() * 960, y: -560, color: c, delay: Math.random() * 900, dy: 1050 + Math.random() * 120, dx: (Math.random() - 0.5) * 160, r: 0.6 + Math.random() * 0.6 });
+      }
+    }
+    prevWinner.current = w;
+    // jouw beurt
+    if (p.mySeat != null && p.turn === p.mySeat && prevTurn.current !== p.mySeat && prevTurn.current !== null && w === null) {
+      const delay = isNew ? 380 : 0;
+      setTimeout(playYourTurn, delay);
+    }
+    prevTurn.current = p.turn;
+    addFx(items, 2600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.pieces, p.moveKey, p.winner, p.turn, q]);
 
   const lastTo = new Set<string>();
   if (p.last) for (const m of p.last.moves) lastTo.add(holeKey(m.to, p.pieces[m.piece]?.color));
@@ -206,7 +349,7 @@ export default function Board(p: Props) {
           const id = cc.card?.id ?? idx * 13 + 5;
           const red = cc.card && (cc.card.suit === 'H' || cc.card.suit === 'D');
           return (
-            <g key={idx} transform={`rotate(${cardRot(id + idx)}) translate(${(idx - visibleCenter.length / 2) * 6}, 0)`}>
+            <g key={idx} ref={idx === visibleCenter.length - 1 ? lastCard : undefined}><g transform={`rotate(${cardRot(id + idx)}) translate(${(idx - visibleCenter.length / 2) * 6}, 0)`}>
               <rect x={-42} y={-60} width={84} height={120} rx={8} className={cc.hidden ? 'card-back' : 'card-front'} />
               {!cc.hidden && cc.card && (
                 <>
@@ -214,7 +357,7 @@ export default function Board(p: Props) {
                   <text x={0} y={18} className={`card-suit ${red ? 'red' : ''}`}>{cc.card.rank === 'JK' ? '★' : SUIT[cc.card.suit]}</text>
                 </>
               )}
-            </g>
+            </g></g>
           );
         })}
         {p.laidCard && (
@@ -227,7 +370,7 @@ export default function Board(p: Props) {
       </g>
 
       {p.turnLabel && (
-        <g className="turn-marker" role="status" aria-label={p.turnLabel} transform="translate(0 142)">
+        <g key={`turn${p.turn}`} className="turn-marker" role="status" aria-label={p.turnLabel} transform="translate(0 142)">
           <rect x="-155" y="-18" width="310" height="36" rx="18" />
           <text x="0" y="1">{p.turnLabel}</text>
         </g>
@@ -247,16 +390,32 @@ export default function Board(p: Props) {
         const onStart = pc.pos.t === 'track' && pc.pos.i === START(pc.color);
         return (
           <g key={pc.id} data-piece={pc.id} className={`marble ${hp.has(pc.id) ? 'can' : ''} ${sel ? 'sel' : ''}`}
+            ref={(el) => { if (el) els.current.set(pc.id, el); else els.current.delete(pc.id); }}
             style={{ transform: `translate(${x}px, ${y}px)` }}
             onClick={() => p.onPiece?.(pc.id)}>
             {(sel || hp.has(pc.id)) && <circle r={23} className="ring" />}
             <ellipse cx={3} cy={6} rx={19} ry={17} fill="url(#shade)" />
-            <circle r={18} fill={`url(#m${pc.color})`} stroke={COLOR_DARK[pc.color]} strokeWidth={1.2} />
-            <ellipse cx={-6} cy={-7} rx={6} ry={4} fill="#fff" opacity={0.75} transform="rotate(-30 -6 -7)" />
+            <g className="mb" ref={(el) => { if (el) inner.current.set(pc.id, el); else inner.current.delete(pc.id); }}>
+              <circle r={18} fill={`url(#m${pc.color})`} stroke={COLOR_DARK[pc.color]} strokeWidth={1.2} />
+              <ellipse cx={-6} cy={-7} rx={6} ry={4} fill="#fff" opacity={0.75} transform="rotate(-30 -6 -7)" />
+            </g>
             {onStart && <circle r={21} className="safe" stroke={COLOR_HEX[pc.color]} />}
           </g>
         );
       })}
+
+      {/* effecten: rimpels, splinters, huisje-gloed, confetti */}
+      <g className="fx" aria-hidden="true">
+        {fx.map((f) => {
+          const st = { animationDelay: `${f.delay}ms` } as React.CSSProperties;
+          if (f.kind === 'ripple') return <circle key={f.id} cx={f.x} cy={f.y} r={20} className="fx-ripple" style={{ ...st, ['--s' as string]: f.r ?? 1 }} />;
+          if (f.kind === 'dust') return <circle key={f.id} cx={f.x} cy={f.y} r={16} className="fx-dust" style={st} />;
+          if (f.kind === 'home') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><circle r={22} className="fx-home" stroke={COLOR_HEX[f.color]} style={st} /><circle r={22} className="fx-home late" stroke="#fff3c4" style={{ animationDelay: `${f.delay + 120}ms` }} /></g>;
+          if (f.kind === 'spark') return <path key={f.id} d={`M ${f.x} ${f.y - 7} L ${f.x + 2} ${f.y - 2} L ${f.x + 7} ${f.y} L ${f.x + 2} ${f.y + 2} L ${f.x} ${f.y + 7} L ${f.x - 2} ${f.y + 2} L ${f.x - 7} ${f.y} L ${f.x - 2} ${f.y - 2} Z`} className="fx-spark" style={st} />;
+          if (f.kind === 'splinter') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><rect x={-2} y={-7} width={4} height={13} rx={2} className="fx-splinter" fill={COLOR_HEX[f.color]} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg` }} /></g>;
+          return <circle key={f.id} cx={f.x} cy={f.y} r={9 * (f.r ?? 1)} className="fx-confetti" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
+        })}
+      </g>
     </svg>
   );
 }

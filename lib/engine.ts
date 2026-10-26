@@ -567,7 +567,164 @@ export function allMovesForCard(P: Piece[], c: Color, rank: Rank): Move[] {
   return movesForRank(P, c, rank).map((g) => g.move);
 }
 
+// --- tactische evaluatie ---
+// Kans dat een tegenstander die d vakjes achter je staat je met één kaart raakt (hand van ~4 kaarten:
+// ~27% kans per kaartsoort). Kaarten die raken: precies d, de koning (slaat alles onderweg tot 13),
+// de 7 (splitsen, tot 7) en de joker (25).
+const PER_RANK = 0.27;
+const HIT: number[] = (() => {
+  const h: number[] = [];
+  for (let d = 0; d <= 25; d++) {
+    let ranks = 0;
+    if (d >= 1 && d <= 13 && d !== 4 && d !== 7) ranks++;   // de kaart met die waarde (4 gaat achteruit)
+    if (d >= 1 && d <= 13) ranks++;                          // koning: landen of voorbijsteken
+    if (d >= 1 && d <= 7) ranks++;                           // 7 splitsen
+    if (d === 25) ranks++;                                   // joker
+    h.push(ranks ? 1 - Math.pow(1 - PER_RANK, ranks) : 0);
+  }
+  return h;
+})();
+export const AI = { risk: 0.45, threat: 0, block: 3, keep: 4, plan: 0.3, planTop: 6 }; // afgesteld via scripts/ai-tournament.ts (74% winst tegen de oude)
+
+function pathBlocked(P: Piece[], from: number, d: number): boolean {
+  for (let j = 1; j < d; j++) if (isBlocker(P, (from + j) % TRACK)) return true;
+  return false;
+}
+
+/** Kans dat pion v (op het parcours) vóór zijn volgende beurt geslagen wordt door een tegenstander. */
+function hitChance(P: Piece[], v: Piece): number {
+  if (v.pos.t !== 'track' || START(v.color) === v.pos.i) return 0; // huisje en eigen 1 zijn veilig
+  const i = v.pos.i;
+  let miss = 1;
+  for (const a of P) {
+    if (teamOf(a.color) === teamOf(v.color)) continue;
+    if (a.pos.t === 'kot') continue;
+    if (a.pos.t !== 'track') continue;
+    const d = (i - a.pos.i + TRACK) % TRACK;
+    // a moet langs zijn eigen ingang? dan gaat hij het huisje in i.p.v. verder (kan ook rondgaan; halve kans)
+    if (d >= 1 && d <= 25 && HIT[d] > 0 && !pathBlocked(P, a.pos.i, d)) {
+      const toEntry = (ENTRY(a.color) - a.pos.i + TRACK) % TRACK;
+      miss *= 1 - HIT[d] * (toEntry < d ? 0.6 : 1);
+    }
+    const back = (a.pos.i - i + TRACK) % TRACK;
+    if (back === 4 && !pathBlocked(P, i, 4)) miss *= 1 - PER_RANK;      // 4 achteruit
+  }
+  // op de 1 van een tegenstander die nog in zijn kot zit: aas of koning = eruit en slaan
+  for (const c of COLORS) {
+    if (teamOf(c) === teamOf(v.color) || START(c) !== i) continue;
+    if (P.some((p) => p.color === c && p.pos.t === 'kot')) miss *= 1 - (1 - Math.pow(1 - PER_RANK, 2));
+  }
+  return 1 - miss;
+}
+
+/** Waarde van een stand voor ploeg t (hoger = beter). */
+function evaluateTactical(P: Piece[], t: Team): number {
+  if (teamDone(P, t)) return 100000;
+  if (teamDone(P, (1 - t) as Team)) return -100000;
+  let s = 0;
+  for (const p of P) {
+    const sign = teamOf(p.color) === t ? 1 : -0.95;
+    const prog = progress(p);
+    let v = prog;
+    if (p.pos.t === 'track') {
+      // risico: verwachte achteruitgang als hij geslagen wordt (terug naar kot = -18)
+      v -= AI.risk * hitChance(P, p) * (prog + 18);
+      // geblokkeerd door een pion van de andere ploeg op zijn eigen 1, tussen hem en zijn huisje
+      const toEntry = (ENTRY(p.color) - p.pos.i + TRACK) % TRACK;
+      for (let j = 1; j <= Math.min(toEntry, 18); j++) {
+        const b = pieceAtTrack(P, (p.pos.i + j) % TRACK);
+        if (b && b.pos.t === 'track' && START(b.color) === b.pos.i && teamOf(b.color) !== teamOf(p.color)) { v -= AI.block; break; }
+      }
+    }
+    s += sign * v;
+  }
+  // dreiging: onze pionen die vlak achter een tegenstander staan (die moet vluchten)
+  if (AI.threat) for (const a of P) {
+    if (a.pos.t !== 'track') continue;
+    for (const v of P) {
+      if (v.pos.t !== 'track' || teamOf(v.color) === teamOf(a.color) || START(v.color) === v.pos.i) continue;
+      const d = (v.pos.i - a.pos.i + TRACK) % TRACK;
+      if (d >= 1 && d <= 13) s += (teamOf(a.color) === t ? 1 : -1) * AI.threat * HIT[d] * (progress(v) + 18) * 0.3;
+    }
+  }
+  return s;
+}
+
+/** Hoeveel een kaart waard is om bij te houden (voorkeur om "goedkope" kaarten eerst te spelen). */
+function keepValue(P: Piece[], c: Color, rank: Rank): number {
+  const cc = controlledColor(P, c);
+  const inKot = P.filter((p) => p.color === cc && p.pos.t === 'kot').length;
+  switch (rank) {
+    case 'A': case 'K': return inKot ? 2.5 : 1;
+    case '7': return 2;
+    case '5': case 'J': return 1.5;
+    case '4': return 1;
+    case 'JK': return 1.5;
+    default: return 0;
+  }
+}
+
 export function botAction(st: State, c: Color, rng: () => number = Math.random): Action {
+  const hand = st.hands[c];
+  if (needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand)) {
+    const p = st.pieces.find((x) => x.color === c && x.pos.t === 'kot')!;
+    return { type: 'freeExit', piece: p.id };
+  }
+  if (!handHasMove(st.pieces, c, hand)) return { type: 'discardAll' };
+  const t = teamOf(c);
+  const cands: { a: Action; s: number; P: Piece[]; card: Card }[] = [];
+  const seen = new Set<Rank>();
+  for (const card of hand) {
+    if (seen.has(card.rank)) continue;
+    seen.add(card.rank);
+    const keep = AI.keep * keepValue(st.pieces, c, card.rank);
+    for (const move of allMovesForCard(st.pieces, c, card.rank)) {
+      const r = matchMove(st.pieces, c, card.rank, move);
+      if (!r) continue;
+      const s = evaluateTactical(r.P, t) - keep + rng() * 0.2;
+      cands.push({ a: { type: 'play', card: card.id, move }, s, P: r.P, card });
+    }
+  }
+  if (!cands.length) return discardChoice(st, c);
+  cands.sort((x, y) => y.s - x.s);
+  if (AI.plan > 0 && hand.length > 1) {
+    // vooruitkijken: wat kan ik volgende beurt nog met de overgebleven kaarten?
+    for (const cd of cands.slice(0, AI.planTop)) {
+      const base = evaluateTactical(cd.P, t);
+      let follow = -Infinity;
+      const seen2 = new Set<Rank>();
+      for (const card of hand) {
+        if (card.id === cd.card.id || seen2.has(card.rank) || card.rank === '7') continue;
+        seen2.add(card.rank);
+        for (const move of allMovesForCard(cd.P, c, card.rank)) {
+          const r = matchMove(cd.P, c, card.rank, move);
+          if (r) follow = Math.max(follow, evaluateTactical(r.P, t) - base);
+        }
+      }
+      if (follow === -Infinity) follow = hand.some((h) => h.id !== cd.card.id && h.rank === '7') ? 0 : -8;
+      cd.s += AI.plan * follow;
+    }
+    cands.sort((x, y) => y.s - x.s);
+  }
+  return cands[0].a;
+}
+
+function discardChoice(st: State, c: Color): Action {
+  const hand = st.hands[c];
+  const P = st.pieces;
+  const cc = controlledColor(P, c);
+  const onBoard = P.some((p) => p.color === cc && p.pos.t !== 'kot');
+  if (onBoard) {
+    // gooi de minst nuttige kaart weg, hou de 5 en boer
+    const order: Rank[] = ['2', '3', '6', '8', '9', '10', 'Q', 'JK', '4', '7', 'A', 'K', 'J', '5'];
+    const sorted = hand.slice().sort((a, b) => order.indexOf(a.rank) - order.indexOf(b.rank));
+    return { type: 'discardOne', card: sorted[0].id };
+  }
+  return { type: 'discardAll' };
+}
+
+/** De vorige, eenvoudige computerspeler (ter vergelijking in de tests). */
+export function botActionSimple(st: State, c: Color, rng: () => number = Math.random): Action {
   const hand = st.hands[c];
   if (needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand)) {
     const p = st.pieces.find((x) => x.color === c && x.pos.t === 'kot')!;

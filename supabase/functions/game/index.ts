@@ -63,6 +63,12 @@ function who(s: SecretRow, token: unknown): string {
 
 const NOOP = Symbol('noop');
 
+/** Stand vóór een zet, voor het trainingslogboek (zonder het groeiende verloop). */
+function snapshotForLog(st: State) {
+  const { log: _log, ...rest } = structuredClone(st);
+  return rest;
+}
+
 /** Schrijf terug met versiecontrole; bij een botsing opnieuw proberen. */
 async function mutate(code: string, responseToken: string, fn: (g: GameRow, s: SecretRow) => unknown | Promise<unknown>) {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -213,6 +219,7 @@ Deno.serve(async (req) => {
     }
 
     if (op === 'act' || op === 'botStep') {
+      let logRow: Record<string, unknown> | null = null;
       const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         if (g.status !== 'playing' || !s.full_state) throw new HttpError(400, 'not_playing');
         const st = s.full_state;
@@ -232,6 +239,8 @@ Deno.serve(async (req) => {
           if (Number(body.version) !== g.version || !g.seats[seat]?.bot || st.winner !== null) return NOOP;
           action = botAction(st, seat, rng);
         }
+        const before = snapshotForLog(st);
+        const actor = op === 'act' ? who(s, body.token) : null;
         try {
           applyAction(st, seat, action);
         } catch (e) {
@@ -240,7 +249,19 @@ Deno.serve(async (req) => {
         }
         g.state = publicView(st);
         if (st.winner !== null) g.status = 'finished';
+        logRow = {
+          game_id: g.id, source: 'online', mode: st.mode, move_no: before.moveNo, round: before.round, seat,
+          is_bot: !!g.seats[seat]?.bot, player_id: actor, player_name: g.seats[seat]?.name ?? null,
+          action, result: st.last, state_before: before,
+        };
       });
+      // pas na een geslaagde bewaring loggen (geen dubbele rijen bij een botsing); fouten blokkeren het spel niet
+      if (snapshot !== NOOP && logRow) {
+        const write = db.from('move_log').insert(logRow).then(({ error }) => { if (error) console.error('move_log', error.message); });
+        // op de achtergrond, zodat de zet niet trager wordt
+        const rt = (globalThis as unknown as { EdgeRuntime?: { waitUntil(p: PromiseLike<unknown>): void } }).EdgeRuntime;
+        if (rt) rt.waitUntil(write); else await write;
+      }
       return json(snapshot === NOOP ? { ok: true } : snapshot);
     }
 

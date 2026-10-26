@@ -8,6 +8,7 @@ import { useT, LangToggle } from '@/lib/i18n';
 import Scoreboard from '@/components/Scoreboard';
 import { BrandTag, MadeBy } from '@/components/Brand';
 import { COLOR_HEX } from '@/components/Board';
+import { TokskeHero } from '@/components/Tokske';
 
 export default function Home() {
   const { t } = useT();
@@ -81,6 +82,7 @@ export default function Home() {
         <p className="presents">Rob De Rop Digital {t.presents}</p>
         <h1 className="title">Tokken</h1>
         <p className="tagline">{t.tagline}</p>
+        <TokskeHero />
       </section>
 
       <div className="home-grid">

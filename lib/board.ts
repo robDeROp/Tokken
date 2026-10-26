@@ -1,7 +1,7 @@
 // Geometrie van het bord, opgemeten uit de foto van het echte MDF-bord
 // (gaatjes automatisch gedetecteerd, perspectief rechtgezet, de vier kwarten gemiddeld).
 // Coördinaten in een vak van -520..520; geel zit onderaan, de andere kleuren zijn 90° gedraaid (wijzerzin).
-import { SEG, TRACK, type Color, type Pos } from './engine';
+import { SEG, TRACK, ENTRY, type Color, type Pos, type Piece, type LastMove } from './engine';
 
 export type XY = [number, number];
 
@@ -70,4 +70,76 @@ export function pathXY(from: Pos, to: Pos, color: Color, entry: number): XY[] {
     return pts;
   }
   return [];
+}
+
+// ---------------------------------------------------------------------------
+// Draaiboek van een zet: wanneer welke knikker langs welke gaatjes rolt.
+// Het bord (animatie) en het geluid gebruiken exact dezelfde tijden.
+
+export type Speed = 'fast' | 'normal' | 'calm' | 'slow';
+// per snelheid: één gaatje, min/max rol, kaart, uitkomen, wissel (boer), geslagen terug naar het kot
+const TIMING: Record<Speed, { hole: number; min: number; max: number; card: number; exit: number; swap: number; kill: number }> = {
+  fast:   { hole: 30,  min: 160, max: 550,  card: 90,  exit: 240, swap: 300, kill: 300 },
+  normal: { hole: 52,  min: 240, max: 950,  card: 150, exit: 330, swap: 420, kill: 420 },
+  calm:   { hole: 150, min: 300, max: 3200, card: 200, exit: 460, swap: 560, kill: 520 },
+  slow:   { hole: 240, min: 400, max: 5200, card: 260, exit: 620, swap: 720, kill: 650 },
+};
+export const hops = (s: Speed) => s === 'calm' || s === 'slow';
+
+export type SegKind = 'roll' | 'exit' | 'swap' | 'home' | 'back';
+export interface Seg { piece: number; color: Color; pts: XY[]; delay: number; dur: number; kind: SegKind; holes: number }
+export interface KillFx { piece: number; color: Color; from: XY | null; at: XY; delay: number }
+export interface Plan { segs: Seg[]; kills: KillFx[]; total: number; killMs: number; hop: boolean }
+
+/**
+ * @param prev  stand vóór de zet (voor de vertrekplek van geslagen knikkers), mag null zijn
+ * @param slotNow   kotvakje van een knikker die nu in het kot staat (geslagen)
+ * @param slotPrev  kotvakje waar een knikker vóór de zet stond (uitkomen)
+ */
+export function planMove(last: LastMove, pieces: Piece[], prev: Piece[] | null, slotNow: (id: number) => number, slotPrev: (id: number) => number, speed: Speed = 'normal'): Plan {
+  const T = TIMING[speed];
+  const CARD_MS = T.card;
+  const segDuration = (holes: number, kind: SegKind) =>
+    kind === 'exit' ? T.exit : kind === 'swap' ? T.swap : Math.max(T.min, Math.min(T.max, holes * T.hole));
+  const segs: Seg[] = [];
+  let t = CARD_MS;
+  const color = (id: number) => (pieces[id]?.color ?? 0) as Color;
+  const isSwap = !!last.swap;
+  for (const m of last.moves) {
+    const c = color(m.piece);
+    let kind: SegKind; let pts: XY[];
+    if (m.from.t === 'kot') {
+      kind = 'exit';
+      pts = [kotXY(c, Math.min(3, slotPrev(m.piece))), posXY(m.to, c, 0)];
+    } else if (isSwap) {
+      kind = 'swap';
+      pts = [posXY(m.from, c, 0), posXY(m.to, c, 0)];
+    } else {
+      const path = pathXY(m.from, m.to, c, ENTRY(c));
+      pts = [posXY(m.from, c, 0), ...(path.length ? path : [posXY(m.to, c, 0)])];
+      const backwards = m.from.t === 'track' && m.to.t === 'track' && (m.from.i - m.to.i + TRACK) % TRACK <= 4 && (m.to.i - m.from.i + TRACK) % TRACK > 25;
+      kind = m.to.t === 'lane' ? 'home' : backwards ? 'back' : 'roll';
+    }
+    const holes = Math.max(1, pts.length - 1);
+    const dur = segDuration(holes, kind);
+    segs.push({ piece: m.piece, color: c, pts, delay: isSwap ? CARD_MS : t, dur, kind, holes });
+    if (!isSwap) t += dur + 40;
+  }
+  if (isSwap) t = CARD_MS + segDuration(1, 'swap');
+  const kills: KillFx[] = [];
+  const lastSeg = segs[segs.length - 1];
+  for (const id of last.kills) {
+    const c = color(id);
+    const was = prev?.find((x) => x.id === id)?.pos;
+    const from = was && was.t !== 'kot' ? posXY(was, c, 0) : lastSeg ? lastSeg.pts[lastSeg.pts.length - 1] : null;
+    kills.push({ piece: id, color: c, from, at: kotXY(c, Math.min(3, slotNow(id))), delay: t - 30 });
+  }
+  const total = t + (kills.length ? T.kill : 0);
+  return { segs, kills, total, killMs: T.kill, hop: hops(speed) };
+}
+
+/** Hoe lang de animatie van een zet duurt (om de computer zolang te laten wachten). */
+export function moveDuration(last: LastMove | null, pieces: Piece[], speed: Speed): number {
+  if (!last) return 0;
+  return planMove(last, pieces, null, () => 0, () => 0, speed).total;
 }

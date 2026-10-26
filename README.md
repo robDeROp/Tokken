@@ -70,3 +70,13 @@ De database bewaart resultaten ook bij een revanche. Reeds uitgespeelde spellen 
 ### Latere uitbreiding naar zes spelers
 
 De huidige variant blijft vier spelers in twee ploegen. Zes spelers vraagt een aparte bord- en regelvariant: geometrie, kleuren, teams, beurtvolgorde, kaarten delen, lobby, servervalidatie en tests bevatten nu aannames voor vier spelers. Voeg dat als één samenhangende variant toe, nadat de ploegindeling en het aantal vakjes vastliggen.
+
+## Update: animaties, geluid, slimmere computer en zettenlogboek
+
+- **Animaties**: knikkers rollen gaatje per gaatje langs het parcours (met bocht), springen met een boogje uit het kot, wie geslagen wordt vliegt draaiend terug met houtsplinters, in het huisje gloeit het gaatje op, kaarten vliegen van de speler naar het midden, confetti-knikkers bij winst. Respecteert "minder beweging" van het toestel.
+- **Geluid** (standaard aan, knop in het menu): rollend glas met een tikje per gaatje en een "tok" bij het landen, een plop bij uitkomen, glas-op-glas bij slaan, marimba bij het huisje en bij winst, kaartgeschuif, houten klopjes voor een stokje, een zacht belletje als jij aan de beurt komt. Alles gesynthetiseerd in de browser (lib/sound.ts), exact gelijk met de animatie (lib/board.ts `planMove`).
+- **Computer**: beoordeelt elke zet op vooruitgang, de kans om geslagen te worden (per afstand en kaart), dreiging op tegenstanders, blokkades en welke kaarten hij beter bijhoudt. Beschermt zo ook de ploegmaat (een tegenstander achter je maat wegslaan levert veel op). `npm run ai-tournament` laat de nieuwe tegen de oude computer spelen.
+- **Zettenlogboek** (tabel `move_log`): elke zet, online en oefenen, met de volledige stand vóór de zet (alle handen en het pak), de gekozen actie en het resultaat. Online schrijft de server, oefenen stuurt in groepjes via `log_practice_moves`. Uitlezen in Supabase (Table editor → move_log → Export CSV) of met SQL, bv. enkel de mensenzetten:
+  ```sql
+  select mode, seat, player_name, action, state_before from move_log where not is_bot order by game_id, move_no;
+  ```

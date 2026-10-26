@@ -11,7 +11,10 @@ import { useT, LangToggle } from '@/lib/i18n';
 import { BrandTag, MadeBy } from './Brand';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import Chat from './Chat';
-import SoundToggle, { useMoveSound } from './SoundToggle';
+import SoundToggle, { SpeedPicker, MascotToggle } from './SoundToggle';
+import { TokskeCommentator } from './Tokske';
+import { moveDuration } from '@/lib/board';
+import { getSpeed } from '@/lib/prefs';
 import CardFace, { RANK_ORDER, rankName } from './CardFace';
 
 export type Seat = { playerId: string | null; name: string; bot: boolean } | null;
@@ -114,7 +117,7 @@ export default function Room({ code }: { code: string }) {
     if (!botTurn || !token || !game) return;
     const tm = setTimeout(() => {
       api<{ game?: GameRow; me?: Me }>({ op: 'botStep', code, token, version: game.version }).then(accept).catch(() => {});
-    }, 850 + Math.random() * 300);
+    }, Math.max(850, moveDuration(game.state?.last ?? null, game.state?.pieces ?? [], getSpeed()) + 300) + Math.random() * 300);
     return () => clearTimeout(tm);
   }, [botTurn, token, me?.seat, game, code, accept]);
 
@@ -253,8 +256,10 @@ const lastLogNumber = (pub: PublicState) => pub.log.at(-1)?.n ?? -1;
 
 type Step = { piece: number; to: Pos };
 
-export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken }: {
+export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken, mascot }: {
   chatToken?: string;
+  /** Tokske geeft commentaar (oefenen) */
+  mascot?: boolean;
   game: GameRow; pub: PublicState; me: Me | null; isHost: boolean; online: Set<string>;
   call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string; setMsg: (s: string) => void;
 }) {
@@ -264,7 +269,6 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const hand = useMemo(() => (me?.hand ?? []).slice().sort((a, b) => RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.suit.localeCompare(b.suit)), [me?.hand]);
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
-  useMoveSound(pub.last, lastLogNumber(pub));
 
   const [selCard, setSelCard] = useState<number | null>(null);
   const [selPiece, setSelPiece] = useState<number | null>(null);
@@ -470,7 +474,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           <button className="btn drawer-rules" onClick={() => { setShowRules(true); setShowControls(false); }}>{t.rules}</button>
           <div className="drawer-control"><span>{lang === 'nl' ? 'Taal' : 'Language'}</span><LangToggle /></div>
           <label className="drawer-zoom">{t.zoom}<input aria-label={t.zoom} type="range" min="1" max="1.7" step="0.1" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
-          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle /></div>
+          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle />{mascot && <MascotToggle />}</div>
+          <div className="drawer-control drawer-speed"><span>{lang === 'nl' ? 'Snelheid' : 'Speed'}</span><SpeedPicker /></div>
           <MadeBy compact />
         </aside>
       </>}
@@ -485,9 +490,11 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
             last={rank === '7' && seven.length ? null : pub.last} lang={lang}
             highlightPieces={hlPieces} highlightHoles={hlHoles} selectedPiece={selPiece} ghosts={ghosts}
             onPiece={onPiece} onHole={onHole}
+            moveKey={lastLogNumber(pub)} winner={pub.winner} mySeat={seat}
           />
           </div>
         </div>
+          {mascot && <TokskeCommentator pub={pub} names={game.seats.map((x) => x?.name ?? '')} mySeat={seat} training={mode === 'training'} />}
 
         <aside className="side">
           <div className="players">
