@@ -8,6 +8,8 @@ import {
 } from '@/lib/engine';
 import { sb, api, ApiError, getToken, setToken, getName, setName } from '@/lib/supabase';
 import { useT, LangToggle } from '@/lib/i18n';
+import { useAuth } from '@/lib/auth';
+import { playMarble, playCard, isMuted, setMuted } from '@/lib/sound';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import CardFace, { RANK_ORDER, rankName } from './CardFace';
 
@@ -121,7 +123,8 @@ function JoinBox({ code, onJoined }: { code: string; onJoined: (token: string) =
   const { t } = useT();
   const [name, setN] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => setN(getName()), []);
+  const { user } = useAuth();
+  useEffect(() => setN(getName() || String(user?.user_metadata?.full_name ?? '').split(' ')[0]), [user]);
   return (
     <form className="panel narrow" onSubmit={async (e) => {
       e.preventDefault();
@@ -239,6 +242,18 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg }:
       setSelCard(pub.laid !== null && pub.turn === seat ? pub.laid : null);
     }
   }, [turnKey, pub.laid, pub.turn, seat]);
+  // geluid: knikker op hout bij elke zet, kaartgeluid bij weggooien
+  const [mute, setMute] = useState(false);
+  useEffect(() => { setMute(isMuted()); }, []);
+  const lastEntry = pub.log.length ? pub.log[pub.log.length - 1] : null;
+  const soundRef = useRef<number | null>(lastEntry?.n ?? null);
+  useEffect(() => {
+    if (!lastEntry || soundRef.current === lastEntry.n) return;
+    soundRef.current = lastEntry.n;
+    if (lastEntry.kind === 'play' || lastEntry.kind === 'freeExit') playMarble(lastEntry.kills.length ? 'kill' : 'move', lastEntry.moves.length);
+    else playCard();
+  }, [lastEntry]);
+
   // kaart niet meer in de hand -> weg
   useEffect(() => { if (selCard !== null && !hand.some((h) => h.id === selCard)) setSelCard(null); }, [hand, selCard]);
 
@@ -304,6 +319,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg }:
     }
     setSeven([]); setSelPiece(null);
     setSelCard(c.id);
+    playCard();
     if (strict && pub.laid !== c.id) await call({ op: 'act', action: { type: 'lay', card: c.id } });
   };
 
@@ -403,6 +419,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg }:
         <Link href="/" className="logo">Tokken</Link>
         <span className="muted small">{t.room} {game.code} · {t.modes[mode]} · {t.round} {pub.round}</span>
         <div className="top-right">
+          <button className="btn small ghost" aria-label={mute ? t.soundOff : t.soundOn} title={mute ? t.soundOff : t.soundOn}
+            onClick={() => { setMuted(!mute); setMute(!mute); if (mute) playMarble(); }}>{mute ? '🔇' : '🔊'}</button>
           <button className="btn small ghost" onClick={() => setShowRules((v) => !v)}>{t.rules}</button>
           <LangToggle />
         </div>

@@ -94,6 +94,28 @@ async function userFromAuth(req: Request) {
   return data.user ?? null;
 }
 
+type AuthUser = { id: string; email?: string; user_metadata?: Record<string, unknown> } | null;
+
+/** Aanmelden verplicht? (app_config.require_login) */
+async function requireUser(req: Request): Promise<AuthUser> {
+  const user = await userFromAuth(req);
+  const { data: cfg } = await db.from('app_config').select('value').eq('key', 'require_login').maybeSingle();
+  if (cfg?.value === true && !user) throw new HttpError(401, 'login_required');
+  return user;
+}
+
+/** Bijhouden wat er gebeurt (tabel events). Fouten hier mogen het spel nooit breken. */
+async function track(type: string, code: string | null, user: AuthUser, name: string | null, data: Record<string, unknown> = {}) {
+  try {
+    await db.from('events').insert({
+      type, code, user_id: user?.id ?? null, email: user?.email ?? null,
+      name: name ?? (user?.user_metadata?.full_name as string | undefined) ?? null, data,
+    });
+  } catch (e) { console.error('track', e); }
+}
+
+const PRACTICE_EVENTS = ['practice_started', 'practice_finished'];
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   try {
@@ -102,9 +124,7 @@ Deno.serve(async (req) => {
     const code = String(body.code ?? '').toUpperCase();
 
     if (op === 'create') {
-      const user = await userFromAuth(req);
-      const { data: cfg } = await db.from('app_config').select('value').eq('key', 'require_login_to_create').maybeSingle();
-      if (cfg?.value === true && !user) throw new HttpError(401, 'login_required');
+      const user = await requireUser(req);
       const name = cleanName(body.name ?? user?.user_metadata?.full_name);
       const playerId = rid(10);
       const token = rid(32);
@@ -120,11 +140,22 @@ Deno.serve(async (req) => {
       }).select('id').single();
       if (error) throw error;
       await db.from('game_secrets').insert({ game_id: g.id, tokens: { [token]: playerId }, host_user: user?.id ?? null });
+      await track('room_created', newCode, user, name, { mode });
       return json({ code: newCode, token, playerId });
     }
 
+    if (op === 'track') {
+      const user = await requireUser(req);
+      const type = String(body.type);
+      if (!PRACTICE_EVENTS.includes(type)) throw new HttpError(400, 'bad_event');
+      const data = typeof body.data === 'object' && body.data ? body.data : {};
+      await track(type, null, user, cleanName(body.name ?? user?.user_metadata?.full_name), data);
+      return json({ ok: true });
+    }
+
     if (op === 'join') {
-      const name = cleanName(body.name);
+      const user = await requireUser(req);
+      const name = cleanName(body.name ?? user?.user_metadata?.full_name);
       const playerId = rid(10);
       const token = rid(32);
       await mutate(code, (g, s) => {
@@ -132,6 +163,7 @@ Deno.serve(async (req) => {
         g.players.push({ id: playerId, name });
         s.tokens[token] = playerId;
       });
+      await track('room_joined', code, user, name);
       return json({ code, token, playerId });
     }
 
@@ -154,6 +186,7 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
+    let started: Record<string, unknown> | null = null;
     if (op === 'sit' || op === 'stand' || op === 'addBot' || op === 'removeBot' || op === 'setMode' || op === 'start' || op === 'rematch') {
       await mutate(code, (g, s) => {
         const pid = who(s, body.token);
@@ -191,11 +224,14 @@ Deno.serve(async (req) => {
           s.full_state = st;
           g.state = publicView(st);
           g.status = 'playing';
+          started = { mode: g.mode, players: g.seats.map((x) => (x?.bot ? 'computer' : x?.name)) };
         }
       });
+      if (started) await track('game_started', code, await userFromAuth(req), null, started);
       return json({ ok: true });
     }
 
+    let finished: Record<string, unknown> | null = null;
     if (op === 'act' || op === 'botStep') {
       await mutate(code, (g, s) => {
         if (g.status !== 'playing' || !s.full_state) throw new HttpError(400, 'not_playing');
@@ -223,8 +259,15 @@ Deno.serve(async (req) => {
           throw e;
         }
         g.state = publicView(st);
-        if (st.winner !== null) g.status = 'finished';
+        if (st.winner !== null) {
+          g.status = 'finished';
+          finished = {
+            winner: st.winner === 0 ? 'geel+oranje' : 'blauw+groen', rounds: st.round, moves: st.moveNo, mode: st.mode,
+            players: g.seats.map((x) => (x?.bot ? 'computer' : x?.name)),
+          };
+        }
       });
+      if (finished) await track('game_finished', code, null, null, finished);
       return json({ ok: true });
     }
 

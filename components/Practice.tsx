@@ -1,9 +1,9 @@
 'use client';
 // Oefenen: jij (geel) tegen/met 3 computers, volledig in je browser, zonder server.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { newGame, applyAction, botAction, publicView, RuleError, type State, type Mode, type Action } from '@/lib/engine';
 import { useT } from '@/lib/i18n';
-import { getName } from '@/lib/supabase';
+import { getName, api } from '@/lib/supabase';
 import { Game, type GameRow } from './Room';
 
 const clone = (s: State): State => structuredClone(s);
@@ -47,6 +47,23 @@ export default function Practice({ mode }: { mode: Mode }) {
       }
     });
   }, [mode, t]);
+
+  // bijhouden: oefenspel gestart / gedaan (fouten negeren, oefenen werkt ook zonder server)
+  const startedRef = useRef<State | null>(null);
+  const finishedRef = useRef<State | null>(null);
+  const firstRef = useRef<State | null>(null);
+  useEffect(() => {
+    if (!st) return;
+    if (st.moveNo === 0 && startedRef.current !== st) {
+      startedRef.current = st;
+      api({ op: 'track', type: 'practice_started', name: myName || null, data: { mode } }).catch(() => {});
+    }
+    if (!firstRef.current || st.moveNo === 0) firstRef.current = st;
+    if (st.winner !== null && finishedRef.current !== firstRef.current) {
+      finishedRef.current = firstRef.current;
+      api({ op: 'track', type: 'practice_finished', name: myName || null, data: { mode, won: st.winner === 0, rounds: st.round } }).catch(() => {});
+    }
+  }, [st, mode, myName]);
 
   // voor de automatische tests
   useEffect(() => { (window as unknown as { __tokken?: State | null }).__tokken = st; }, [st]);
