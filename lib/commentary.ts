@@ -18,6 +18,7 @@ const L = {
   nl: {
     kill: ['Amai! {A} maakt {V} helemaal kapot!', 'Tok! {V} mag terug naar zijn kot. Groetjes van {A}.', 'Oei oei oei, {V}... dat was {A}.', '{A} kent geen genade met {V}!', 'Terug naar af, {V}!', 'Paf! {A} rijdt {V} gewoon omver.'],
     youKill: ['Zo! Jij slaat {V}! Dat zag ik graag.', 'Boem! {V} ligt eruit. Goed gezien!', 'Haha, {V} had dat niet zien aankomen!'],
+    youStreak: ['Jij bent on fire! Al {n} op rij!', 'Killstreak! Jij hebt er al {n} op rij.'],
     youDead: ['Ai, {A} heeft jou te pakken. Wraak nemen?', 'Auw! {A} stuurt je terug naar je kot.', 'Dat doet pijn... {A} zal dat nog berouwen.'],
     partnerDead: ['Hela! {A} pakt je ploegmaat {V}!', 'Je maat {V} is gesneuveld. {A} staat op de lijst.'],
     streak2: ['Killstreak voor {A}! Al {n} op rij!', '{A} is on fire! {n} slachtoffers!'],
@@ -45,6 +46,7 @@ const L = {
   en: {
     kill: ['Damn! {A} just destroyed {V}!', 'Tok! {V} goes back home. Love, {A}.', 'Oh no, {V}... that was {A}.', '{A} shows {V} no mercy!', 'Back to start, {V}!', 'Bam! {A} runs straight over {V}.'],
     youKill: ['Yes! You took out {V}! Love to see it.', 'Boom! {V} is out. Nice one!', 'Ha, {V} never saw that coming!'],
+    youStreak: ['You are on fire! {n} in a row!', 'Kill streak! You have {n} in a row.'],
     youDead: ['Ouch, {A} got you. Revenge time?', '{A} sends you back to your box.', 'That hurts... {A} will regret that.'],
     partnerDead: ['Hey! {A} took out your partner {V}!', 'Your partner {V} is down. {A} is on the list.'],
     streak2: ['Kill streak for {A}! {n} in a row!', '{A} is on fire! {n} victims!'],
@@ -92,11 +94,26 @@ export class Commentator {
     return n && n !== col ? `${n} (${col.toLowerCase()})` : col;
   }
 
-  /** Nieuwe zet: geef eventueel een lijn terug. */
+  /** Nieuwe zet: geef eventueel een lijn terug (spaarzaam: enkel hoogtepunten, met rust ertussen). */
   react(prev: PublicState | null, cur: PublicState): Line | null {
+    this.sinceLine++;
+    const l = this.raw(prev, cur);
+    if (!l) return null;
+    const quiet = this.sinceLine;
+    const ok =
+      l.prio >= 9 ? quiet >= 2 :                          // winst, jij slaat / wordt geslagen, killstreak
+      l.prio >= 8 ? quiet >= 4 :                          // eigen maat, dubbele kill, bijna-thuis
+      l.prio >= 7 ? quiet >= 6 && Math.random() < 0.5 :   // gewone kill, iemand helemaal binnen
+      l.prio >= 4 ? quiet >= 12 && Math.random() < 0.3 :  // huisje, stokje, wissel
+      quiet >= 20 && Math.random() < 0.35;                // weetjes en tips
+    if (!ok && l.prio < 10) return null;
+    this.sinceLine = 0;
+    return l;
+  }
+
+  private raw(prev: PublicState | null, cur: PublicState): Line | null {
     const last: LastMove | null = cur.last;
     const T = L[this.lang];
-    this.sinceLine++;
     if (cur.winner !== null && (!prev || prev.winner === null)) {
       const us = this.me === null || teamOf(this.me) === cur.winner;
       return { text: pick(us ? T.winUs : T.winThem), mood: us ? 'proud' : 'sad', prio: 10 };
@@ -105,7 +122,6 @@ export class Commentator {
     const A = last.by;
     const vars = { A: this.who(A) } as Record<string, string | number>;
     const say = (list: string[], mood: Mood, prio: number, extra: Record<string, string | number> = {}): Line => {
-      this.sinceLine = 0;
       let text = fill(pick(list), { ...vars, ...extra });
       text = text.charAt(0).toUpperCase() + text.slice(1);
       return { text, mood, prio };
@@ -122,7 +138,7 @@ export class Commentator {
       const n = this.streak[A];
       if (friendly) return say(T.friendly, 'laugh', 8, { V });
       if (this.me !== null && v.color === this.me) return say(T.youDead, 'sad', 9, { V });
-      if (this.me !== null && A === this.me) return say(n >= 2 ? T.streak2 : T.youKill, 'proud', 9, { V, n });
+      if (this.me !== null && A === this.me) return say(n >= 2 ? T.youStreak : T.youKill, 'proud', 9, { V, n });
       if (victims.length > 1) return say(T.multi, 'shocked', 9, { n: victims.length });
       if (n >= 3) return say(T.streak3, 'shocked', 9, { n });
       if (n === 2) return say(T.streak2, 'shocked', 8, { n });
@@ -148,7 +164,7 @@ export class Commentator {
     if (last.rank === '4' && last.moves.length === 1 && last.moves[0].from.t === 'track' && Math.random() < 0.4) return say(T.back4, 'cheeky', 3);
     if (last.moves.some((m) => m.from.t === 'kot') && Math.random() < 0.25) return say(T.out, 'happy', 2);
     if (last.kind === 'discardAll' && Math.random() < 0.3) return say(T.discard, 'laugh', 2);
-    if (this.sinceLine > 9) {
+    if (this.sinceLine > 20) {
       if (this.training && Math.random() < 0.7) return say(T.tips, 'think', 1);
       return say(T.idle, 'cheeky', 1);
     }
