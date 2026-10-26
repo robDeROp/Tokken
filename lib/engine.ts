@@ -618,7 +618,7 @@ function hitChance(P: Piece[], v: Piece): number {
 }
 
 /** Waarde van een stand voor ploeg t (hoger = beter). */
-function evaluateTactical(P: Piece[], t: Team): number {
+function evaluateTactical(P: Piece[], t: Team, W: typeof AI = AI): number {
   if (teamDone(P, t)) return 100000;
   if (teamDone(P, (1 - t) as Team)) return -100000;
   let s = 0;
@@ -628,23 +628,23 @@ function evaluateTactical(P: Piece[], t: Team): number {
     let v = prog;
     if (p.pos.t === 'track') {
       // risico: verwachte achteruitgang als hij geslagen wordt (terug naar kot = -18)
-      v -= AI.risk * hitChance(P, p) * (prog + 18);
+      v -= W.risk * hitChance(P, p) * (prog + 18);
       // geblokkeerd door een pion van de andere ploeg op zijn eigen 1, tussen hem en zijn huisje
       const toEntry = (ENTRY(p.color) - p.pos.i + TRACK) % TRACK;
       for (let j = 1; j <= Math.min(toEntry, 18); j++) {
         const b = pieceAtTrack(P, (p.pos.i + j) % TRACK);
-        if (b && b.pos.t === 'track' && START(b.color) === b.pos.i && teamOf(b.color) !== teamOf(p.color)) { v -= AI.block; break; }
+        if (b && b.pos.t === 'track' && START(b.color) === b.pos.i && teamOf(b.color) !== teamOf(p.color)) { v -= W.block; break; }
       }
     }
     s += sign * v;
   }
   // dreiging: onze pionen die vlak achter een tegenstander staan (die moet vluchten)
-  if (AI.threat) for (const a of P) {
+  if (W.threat) for (const a of P) {
     if (a.pos.t !== 'track') continue;
     for (const v of P) {
       if (v.pos.t !== 'track' || teamOf(v.color) === teamOf(a.color) || START(v.color) === v.pos.i) continue;
       const d = (v.pos.i - a.pos.i + TRACK) % TRACK;
-      if (d >= 1 && d <= 13) s += (teamOf(a.color) === t ? 1 : -1) * AI.threat * HIT[d] * (progress(v) + 18) * 0.3;
+      if (d >= 1 && d <= 13) s += (teamOf(a.color) === t ? 1 : -1) * W.threat * HIT[d] * (progress(v) + 18) * 0.3;
     }
   }
   return s;
@@ -664,7 +664,8 @@ function keepValue(P: Piece[], c: Color, rank: Rank): number {
   }
 }
 
-export function botAction(st: State, c: Color, rng: () => number = Math.random): Action {
+export function botAction(st: State, c: Color, rng: () => number = Math.random, opts: Partial<typeof AI> = {}): Action {
+  const W = { ...AI, ...opts };
   const hand = st.hands[c];
   if (needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand)) {
     const p = st.pieces.find((x) => x.color === c && x.pos.t === 'kot')!;
@@ -677,20 +678,20 @@ export function botAction(st: State, c: Color, rng: () => number = Math.random):
   for (const card of hand) {
     if (seen.has(card.rank)) continue;
     seen.add(card.rank);
-    const keep = AI.keep * keepValue(st.pieces, c, card.rank);
+    const keep = W.keep * keepValue(st.pieces, c, card.rank);
     for (const move of allMovesForCard(st.pieces, c, card.rank)) {
       const r = matchMove(st.pieces, c, card.rank, move);
       if (!r) continue;
-      const s = evaluateTactical(r.P, t) - keep + rng() * 0.2;
+      const s = evaluateTactical(r.P, t, W) - keep + rng() * 0.2;
       cands.push({ a: { type: 'play', card: card.id, move }, s, P: r.P, card });
     }
   }
   if (!cands.length) return discardChoice(st, c);
   cands.sort((x, y) => y.s - x.s);
-  if (AI.plan > 0 && hand.length > 1) {
+  if (W.plan > 0 && hand.length > 1) {
     // vooruitkijken: wat kan ik volgende beurt nog met de overgebleven kaarten?
-    for (const cd of cands.slice(0, AI.planTop)) {
-      const base = evaluateTactical(cd.P, t);
+    for (const cd of cands.slice(0, W.planTop)) {
+      const base = evaluateTactical(cd.P, t, W);
       let follow = -Infinity;
       const seen2 = new Set<Rank>();
       for (const card of hand) {
@@ -698,11 +699,11 @@ export function botAction(st: State, c: Color, rng: () => number = Math.random):
         seen2.add(card.rank);
         for (const move of allMovesForCard(cd.P, c, card.rank)) {
           const r = matchMove(cd.P, c, card.rank, move);
-          if (r) follow = Math.max(follow, evaluateTactical(r.P, t) - base);
+          if (r) follow = Math.max(follow, evaluateTactical(r.P, t, W) - base);
         }
       }
       if (follow === -Infinity) follow = hand.some((h) => h.id !== cd.card.id && h.rank === '7') ? 0 : -8;
-      cd.s += AI.plan * follow;
+      cd.s += W.plan * follow;
     }
     cands.sort((x, y) => y.s - x.s);
   }
@@ -757,4 +758,46 @@ export function botActionSimple(st: State, c: Color, rng: () => number = Math.ra
     return { type: 'discardOne', card: sorted[0].id };
   }
   return { type: 'discardAll' };
+}
+
+// ---------- niveaus ----------
+export type BotLevel = 1 | 2 | 3 | 4;
+export const BOT_LEVELS: BotLevel[] = [1, 2, 3, 4];
+export const BOT_LEVEL_NAME: Record<BotLevel, { nl: string; en: string }> = {
+  1: { nl: 'Beginner', en: 'Beginner' },
+  2: { nl: 'Gemiddeld', en: 'Average' },
+  3: { nl: 'Sterk', en: 'Strong' },
+  4: { nl: 'Expert', en: 'Expert' },
+};
+/** Vaste Elo per niveau (geijkt met scripts/ai-tournament.ts; Gemiddeld = 1000 = startrating). */
+export const BOT_RATING: Record<BotLevel, number> = { 1: 800, 2: 1000, 3: 1150, 4: 1200 };
+export const asLevel = (x: unknown): BotLevel => ([1, 2, 3, 4].includes(Number(x)) ? Number(x) : 4) as BotLevel;
+
+/** Alle geldige speelzetten (voor de beginner die soms zomaar iets doet). */
+function legalPlays(st: State, c: Color): Action[] {
+  const res: Action[] = [];
+  const seen = new Set<Rank>();
+  for (const card of st.hands[c]) {
+    if (seen.has(card.rank)) continue;
+    seen.add(card.rank);
+    for (const move of allMovesForCard(st.pieces, c, card.rank).slice(0, 60)) {
+      if (matchMove(st.pieces, c, card.rank, move)) res.push({ type: 'play', card: card.id, move });
+    }
+  }
+  return res;
+}
+
+/** De computer op een bepaald niveau. */
+export function botActionLevel(st: State, c: Color, level: BotLevel = 4, rng: () => number = Math.random): Action {
+  if (level === 1) {
+    const hand = st.hands[c];
+    if (!needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand) && handHasMove(st.pieces, c, hand) && rng() < 0.5) {
+      const plays = legalPlays(st, c);
+      if (plays.length) return plays[Math.floor(rng() * plays.length)];
+    }
+    return botActionSimple(st, c, rng);
+  }
+  if (level === 2) return botActionSimple(st, c, rng);
+  if (level === 3) return botAction(st, c, rng, { plan: 0, keep: 2.5 });
+  return botAction(st, c, rng);
 }
