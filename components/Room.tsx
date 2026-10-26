@@ -11,7 +11,7 @@ import { useT, LangToggle } from '@/lib/i18n';
 import { BrandTag, MadeBy } from './Brand';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import Chat from './Chat';
-import SoundToggle from './SoundToggle';
+import SoundToggle, { useMoveSound } from './SoundToggle';
 import CardFace, { RANK_ORDER, rankName } from './CardFace';
 
 export type Seat = { playerId: string | null; name: string; bot: boolean } | null;
@@ -264,6 +264,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const hand = useMemo(() => (me?.hand ?? []).slice().sort((a, b) => RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.suit.localeCompare(b.suit)), [me?.hand]);
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
+  useMoveSound(pub.last, lastLogNumber(pub));
 
   const [selCard, setSelCard] = useState<number | null>(null);
   const [selPiece, setSelPiece] = useState<number | null>(null);
@@ -469,7 +470,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           <button className="btn drawer-rules" onClick={() => { setShowRules(true); setShowControls(false); }}>{t.rules}</button>
           <div className="drawer-control"><span>{lang === 'nl' ? 'Taal' : 'Language'}</span><LangToggle /></div>
           <label className="drawer-zoom">{t.zoom}<input aria-label={t.zoom} type="range" min="1" max="1.7" step="0.1" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
-          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle last={pub.last} moveNo={lastLogNumber(pub)} /></div>
+          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle /></div>
           <MadeBy compact />
         </aside>
       </>}

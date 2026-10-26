@@ -2,38 +2,25 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LastMove } from '@/lib/engine';
 import { useT } from '@/lib/i18n';
+import { installUnlock, onSoundChange, playMove, setSoundEnabled, soundEnabled } from '@/lib/sound';
 
-// Korte, gedempte tik: een ruisimpuls met houten resonanties, zonder pieptonen.
-export default function SoundToggle({ last, moveNo }: { last: LastMove | null; moveNo: number }) {
-  const { lang } = useT();
-  const [enabled, setEnabled] = useState(false);
-  const context = useRef<AudioContext | null>(null);
+/** Speelt het knikkergeluid bij elke nieuwe zet. Moet altijd gemount zijn (niet in een lade). */
+export function useMoveSound(last: LastMove | null, moveNo: number) {
   const seen = useRef(moveNo);
-  useEffect(() => () => { void context.current?.close(); }, []);
+  useEffect(() => { installUnlock(); }, []);
   useEffect(() => {
     if (seen.current === moveNo) return;
+    const fresh = moveNo > seen.current;
     seen.current = moveNo;
-    if (!enabled || !last?.moves.length || !context.current || context.current.state !== 'running') return;
-    const ctx = context.current;
-    const buffer = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * 0.085), ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) {
-      const t = i / ctx.sampleRate;
-      data[i] = ((Math.random() * 2 - 1) * Math.exp(-t * 240) +
-        Math.sin(t * 2 * Math.PI * 420) * Math.exp(-t * 90) * 0.5 +
-        Math.sin(t * 2 * Math.PI * 830) * Math.exp(-t * 130) * 0.2) * 0.12;
-    }
-    const source = ctx.createBufferSource();
-    const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass'; filter.frequency.value = 2200;
-    source.buffer = buffer; source.connect(filter); filter.connect(ctx.destination); source.start();
-    source.onended = () => { source.disconnect(); filter.disconnect(); };
-  }, [last, moveNo, enabled]);
-  return <button className="btn small" aria-pressed={enabled} onClick={async () => {
-    if (!enabled) {
-      try { context.current ??= new AudioContext(); await context.current.resume(); }
-      catch { return; }
-    }
-    setEnabled(!enabled);
-  }}>{lang === 'nl' ? 'Geluid' : 'Sound'}: {enabled ? (lang === 'nl' ? 'aan' : 'on') : (lang === 'nl' ? 'uit' : 'off')}</button>;
+    if (fresh) playMove(last);
+  }, [last, moveNo]);
+}
+
+export default function SoundToggle() {
+  const { lang } = useT();
+  const [enabled, setEnabled] = useState(true);
+  useEffect(() => { setEnabled(soundEnabled()); return onSoundChange(setEnabled); }, []);
+  return <button className="btn small" aria-pressed={enabled} onClick={() => setSoundEnabled(!enabled)}>
+    {enabled ? '🔊' : '🔇'} {lang === 'nl' ? 'Geluid' : 'Sound'}: {enabled ? (lang === 'nl' ? 'aan' : 'on') : (lang === 'nl' ? 'uit' : 'off')}
+  </button>;
 }
