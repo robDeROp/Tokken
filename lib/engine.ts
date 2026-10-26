@@ -495,7 +495,8 @@ export function applyAction(st: State, c: Color, a: Action): void {
       const n = hand.length;
       for (const card of hand) st.center.push({ card, hidden: true, by: c });
       st.hands[c] = [];
-      st.sticks[c] += 1;
+      // Enkel een stokje als je je volledige hand (7 kaarten) in één keer afgooit.
+      if (n === 7) st.sticks[c] += 1;
       pushLog(st, { by: c, kind: 'discardAll', moves: [], kills: [], count: n });
       endTurn(st);
       return;

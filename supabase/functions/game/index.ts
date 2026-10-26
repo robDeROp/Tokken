@@ -175,6 +175,18 @@ Deno.serve(async (req) => {
       return json({ playerId: pid, seat, hand, version: g.version });
     }
 
+    if (op === 'chat') {
+      const { g, s } = await load(code);
+      const pid = who(s, body.token);
+      const text = String(body.text ?? '').trim().slice(0, 300);
+      if (!text) throw new HttpError(400, 'empty');
+      const seat = seatOf(g, pid);
+      const name = g.players.find((x) => x.id === pid)?.name ?? 'Speler';
+      const { error } = await db.from('chat_messages').insert({ code, player_id: pid, name, color: seat, text });
+      if (error) throw error;
+      return json({ ok: true });
+    }
+
     if (op === 'rename') {
       await mutate(code, (g, s) => {
         const pid = who(s, body.token);

@@ -19,10 +19,13 @@ p.on('pageerror', (e) => pageErrors.push(e.message));
 await p.goto(`${base}/oefenen?mode=${mode}`, { waitUntil: 'networkidle' });
 
 const st = () => p.evaluate(() => window.__tokken);
+let lastHit = '';
 const clickHole = async (key) => {
   const el = await p.$(`[data-hole="${key}"]`);
   const bb = await el.boundingBox();
-  await p.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
+  const x = bb.x + bb.width / 2, y = bb.y + bb.height / 2;
+  lastHit = await p.evaluate(([x, y]) => { const e = document.elementFromPoint(x, y); const g = e && e.closest('[data-piece],[data-hole],.hand-bar,.nametag'); return (e ? e.tagName + '.' + (e.getAttribute('class') || '') : 'none') + ' in ' + (g ? (g.getAttribute('data-piece') ?? g.getAttribute('data-hole') ?? g.className) : '-'); }, [x, y]);
+  await p.mouse.click(x, y);
 };
 const clickPiece = async (id) => {
   const el = await p.$(`[data-piece="${id}"]`);
@@ -119,7 +122,7 @@ for (let turn = 0; turn < turns; turn++) {
     await p.waitForTimeout(150);
     const after = await st();
     if (after.moveNo <= moveNo + 1 && after.turn === 0 && after.winner == null) {
-      stats.problems.push(`turn ${turn}: move ${JSON.stringify(m)} with ${chosen.card.rank} did not go through; err="${await errText()}"`);
+      stats.problems.push(`turn ${turn}: move ${JSON.stringify(m)} with ${chosen.card.rank} did not go through; err="${await errText()}" hit=${lastHit}`);
       await p.screenshot({ path: `${out}pro-problem-${turn}.png` });
       break;
     }

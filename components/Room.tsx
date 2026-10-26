@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth';
 import { playMarble, playCard, isMuted, setMuted } from '@/lib/sound';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import CardFace, { RANK_ORDER, rankName } from './CardFace';
+import Chat from './Chat';
 
 export type Seat = { playerId: string | null; name: string; bot: boolean } | null;
 export interface GameRow {
@@ -100,10 +101,11 @@ export default function Room({ code }: { code: string }) {
 
   const isHost = me?.playerId === game.host_player;
   if (game.status === 'lobby' || !pub) {
-    return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} /></Shell>;
+    return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} chat={<Chat code={code} token={token} myId={me?.playerId ?? null} />} /></Shell>;
   }
   return (
-    <Game game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg} />
+    <Game game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg}
+      chat={<Chat code={code} token={token} myId={me?.playerId ?? null} />} />
   );
 }
 
@@ -143,9 +145,9 @@ function JoinBox({ code, onJoined }: { code: string; onJoined: (token: string) =
   );
 }
 
-function Lobby({ game, me, isHost, online, call, busy, msg }: {
+function Lobby({ game, me, isHost, online, call, busy, msg, chat }: {
   game: GameRow; me: Me | null; isHost: boolean; online: Set<string>;
-  call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string;
+  call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string; chat?: React.ReactNode;
 }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);
@@ -206,15 +208,17 @@ function Lobby({ game, me, isHost, online, call, busy, msg }: {
         ) : <p className="muted">{t.waitingHost}</p>}
         {msg && <p className="err">{msg}</p>}
       </section>
+      {chat && <div>{chat}</div>}
     </div>
   );
 }
 
 type Step = { piece: number; to: Pos };
 
-export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg }: {
+export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chat }: {
   game: GameRow; pub: PublicState; me: Me | null; isHost: boolean; online: Set<string>;
   call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string; setMsg: (s: string) => void;
+  chat?: React.ReactNode;
 }) {
   const { t, lang } = useT();
   const seat = me?.seat ?? null;
@@ -467,6 +471,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg }:
               <button className="btn small" onClick={() => setSeven(seven.slice(0, -1))}>{t.undo}</button>
             )}
           </div>
+
+          {chat}
 
           <div className="log">
             <h3>{t.log}</h3>

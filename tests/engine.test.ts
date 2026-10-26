@@ -162,7 +162,7 @@ test('stokjes: alles afgooien geeft stokje, 2 stokjes = gratis buiten en dan kaa
   const st = newGame('pro', mulberry(3));
   st.pieces = emptyPieces();
   st.turn = 0;
-  st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }, { id: 901, rank: '3', suit: 'S' }];
+  st.hands[0] = [900, 901, 903, 904, 905, 906, 907].map((id) => ({ id, rank: '2' as const, suit: 'S' as const }));
   st.sticks[0] = 1;
   assert.throws(() => applyAction(st, 0, { type: 'play', card: 900, move: { kind: 'step', piece: 0, to: tr(2) } }), RuleError);
   applyAction(st, 0, { type: 'discardAll' });
@@ -175,6 +175,19 @@ test('stokjes: alles afgooien geeft stokje, 2 stokjes = gratis buiten en dan kaa
   assert.equal(st.sticks[0], 0);
   assert.equal(st.turn, 0);
   applyAction(st, 0, { type: 'play', card: 902, move: { kind: 'step', piece: 0, to: tr(2) } });
+});
+
+test('stokje enkel bij 7 kaarten afgooien', () => {
+  const st = newGame('pro', mulberry(8));
+  st.pieces = emptyPieces();
+  st.turn = 0;
+  st.hands[0] = [2, 3, 6, 8, 9].map((v, i) => ({ id: 800 + i, rank: String(v) as '2', suit: 'S' as const }));
+  applyAction(st, 0, { type: 'discardAll' });
+  assert.equal(st.sticks[0], 0);
+  st.turn = 0;
+  st.hands[0] = [2, 3, 6, 8, 9, 10, 2].map((v, i) => ({ id: 810 + i, rank: String(v) as '2', suit: 'S' as const }));
+  applyAction(st, 0, { type: 'discardAll' });
+  assert.equal(st.sticks[0], 1);
 });
 
 test('gelegd is gelegd (pro)', () => {

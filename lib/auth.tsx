@@ -18,11 +18,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const client = sb();
     let sessionDone = false, cfgDone = false;
     const done = () => { if (sessionDone && cfgDone) setReady(true); };
+    // als Supabase traag of onbereikbaar is: niet eindeloos een leeg scherm tonen
+    const fallback = setTimeout(() => setReady(true), 2500);
     client.auth.getSession().then(({ data }) => { setUser(data.session?.user ?? null); sessionDone = true; done(); });
     const { data: sub } = client.auth.onAuthStateChange((_e, s) => setUser(s?.user ?? null));
     client.from('app_config').select('value').eq('key', 'require_login').maybeSingle()
       .then(({ data }) => { setRequired(data?.value === true); cfgDone = true; done(); }, () => { cfgDone = true; done(); });
-    return () => sub.subscription.unsubscribe();
+    return () => { clearTimeout(fallback); sub.subscription.unsubscribe(); };
   }, []);
 
   const signIn = () => {
@@ -37,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function AuthGate({ children }: { children: ReactNode }) {
   const { user, ready, required, signIn } = useAuth();
   const { t } = useT();
-  if (!ready) return null;
+  if (!ready) return <div className="boot" aria-busy="true"><span className="boot-dot" /></div>;
   if (required && !user) {
     return (
       <main className="shell">
