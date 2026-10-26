@@ -314,3 +314,26 @@ export function playClick() {
   if (!c) return;
   tick(c, c.currentTime + 0.005, 0.1);
 }
+
+/** Uitdelen: eerst schudden (ritsel), dan per kaart een zacht "flits"-je. */
+export function playDeal(cards: number, gapMs: number, shuffleMs: number) {
+  const c = ready();
+  if (!c) return;
+  const t = c.currentTime + 0.02;
+  // schudden: snelle reeks kaartrandjes die over elkaar ritsen
+  for (let i = 0; i < 14; i++) {
+    const at = t + i * (shuffleMs / 1000 / 16) + Math.random() * 0.006;
+    noiseBurst(c, at, 0.012, 0.07 + Math.random() * 0.04, 'bandpass', 3800 + Math.random() * 1500, 1.5);
+  }
+  noiseBurst(c, t + shuffleMs / 1000 - 0.03, 0.04, 0.12, 'lowpass', 700); // tikje: stapel recht
+  // delen
+  for (let k = 0; k < cards; k++) {
+    const at = t + shuffleMs / 1000 + (k * gapMs) / 1000;
+    const s = c.createBufferSource(); s.buffer = noise!;
+    const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.1;
+    bp.frequency.setValueAtTime(4200 + Math.random() * 800, at); bp.frequency.exponentialRampToValueAtTime(1800, at + 0.05);
+    const g = env(c, at, 0.05 + Math.random() * 0.02, 0.006, 0.05);
+    s.connect(bp); bp.connect(g); g.connect(out!);
+    s.start(at, Math.random() * 0.5, 0.08);
+  }
+}

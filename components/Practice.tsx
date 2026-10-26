@@ -5,7 +5,7 @@ import { newGame, applyAction, publicView, RuleError, type State, type Mode, typ
 import { useT } from '@/lib/i18n';
 import { getName, sb } from '@/lib/supabase';
 import { Game, type GameRow } from './Room';
-import { moveDuration } from '@/lib/board';
+import { moveDuration, dealDuration } from '@/lib/board';
 import { getSpeed } from '@/lib/prefs';
 
 const clone = (s: State): State => structuredClone(s);
@@ -68,7 +68,8 @@ export default function Practice({ mode }: { mode: Mode }) {
     const turn = st.turn;
     const moveNo = st.moveNo;
     // wacht tot de vorige zet uitgerold is (hangt af van de gekozen snelheid)
-    const wait = Math.max(450, moveDuration(st.last, st.pieces, getSpeed()) + 220);
+    const newDeal = st.log.length === 0 || st.log.at(-1)!.round !== st.round;
+    const wait = Math.max(450, moveDuration(st.last, st.pieces, getSpeed()) + 220) + (newDeal ? dealDuration(getSpeed()) : 0);
     let tm: ReturnType<typeof setTimeout>;
     worker.onmessage = (event) => {
       if (!event.data.action) { setMsg(t.errors.server_error); return; }

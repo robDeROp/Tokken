@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, TRACK, START, type Color, type Piece, type Pos, type CenterCard, type LastMove, type Card } from '@/lib/engine';
-import { trackXY, laneXY, kotXY, stickXY, trackLabelXY, laneLabelXY, rot, planMove, type XY } from '@/lib/board';
+import { trackXY, laneXY, kotXY, stickXY, trackLabelXY, laneLabelXY, rot, planMove, dealTiming, DEAL_CARDS, SHUFFLE_MS, type XY } from '@/lib/board';
 import { getSpeed, onSpeedChange, type Speed } from '@/lib/prefs';
-import { installUnlock, playMove, playWin, playYourTurn } from '@/lib/sound';
+import { installUnlock, playMove, playWin, playYourTurn, playDeal } from '@/lib/sound';
 import { rankLabel, SUIT } from './CardFace';
 import type { Lang } from '@/lib/i18n';
 
@@ -36,9 +36,11 @@ interface Props {
   winner?: number | null;
   /** jouw stoel (voor het belletje als je aan de beurt komt) */
   mySeat?: Color | null;
+  /** nieuwe ronde: kaarten uitdelen vanaf het midden (beginnend links van de deler) */
+  deal?: { round: number; dealer: Color } | null;
 }
 
-type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number };
+type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number };
 let fxId = 0;
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -86,6 +88,25 @@ export default function Board(p: Props) {
     const ids = new Set(withId.map((f) => f.id));
     setTimeout(() => setFx((cur) => cur.filter((f) => !ids.has(f.id))), life);
   };
+
+  // uitdelen
+  const dealt = useRef<number | null>(null);
+  useEffect(() => {
+    const d = p.deal;
+    if (!d || dealt.current === d.round) return;
+    dealt.current = d.round;
+    const { gap, fly } = dealTiming(speed.current);
+    playDeal(DEAL_CARDS, gap, SHUFFLE_MS);
+    if (reducedMotion()) return;
+    const items: Omit<Fx, 'id'>[] = [{ kind: 'deck', x: 0, y: 0, color: 0, delay: 0, dur: SHUFFLE_MS + DEAL_CARDS * gap + fly }];
+    for (let k = 0; k < DEAL_CARDS; k++) {
+      const c = ((d.dealer + 1 + (k % 4)) % 4) as Color;
+      const [tx, ty] = V(rot([-235 + (Math.floor(k / 4) - 3) * 9, 392], c));
+      items.push({ kind: 'deal', x: 0, y: 0, color: c, delay: SHUFFLE_MS + k * gap, dur: fly, dx: tx, dy: ty, r: (c % 2 ? 90 : 0) + (Math.random() * 30 - 15) + 360 });
+    }
+    addFx(items, SHUFFLE_MS + DEAL_CARDS * gap + fly + 600);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.deal?.round]);
 
   useLayoutEffect(() => {
     const now = new Map(p.pieces.map((pc) => [pc.id, pieceXY(pc)] as [number, XY]));
@@ -411,6 +432,8 @@ export default function Board(p: Props) {
           if (f.kind === 'ripple') return <circle key={f.id} cx={f.x} cy={f.y} r={20} className="fx-ripple" style={{ ...st, ['--s' as string]: f.r ?? 1 }} />;
           if (f.kind === 'dust') return <circle key={f.id} cx={f.x} cy={f.y} r={16} className="fx-dust" style={st} />;
           if (f.kind === 'home') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><circle r={22} className="fx-home" stroke={COLOR_HEX[f.color]} style={st} /><circle r={22} className="fx-home late" stroke="#fff3c4" style={{ animationDelay: `${f.delay + 120}ms` }} /></g>;
+          if (f.kind === 'deal') return <g key={f.id} className="fx-deal" style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg`, ['--dur' as string]: `${f.dur}ms` }}><rect x={-24} y={-34} width={48} height={68} rx={6} className="card-back" /></g>;
+          if (f.kind === 'deck') return <g key={f.id} className="fx-deck" style={{ ['--dur' as string]: `${f.dur}ms` }}>{[0, 1, 2, 3].map((i) => <rect key={i} x={-28 + i * 1.5} y={-40 - i * 2.5} width={56} height={80} rx={7} className="card-back" />)}</g>;
           if (f.kind === 'spark') return <path key={f.id} d={`M ${f.x} ${f.y - 7} L ${f.x + 2} ${f.y - 2} L ${f.x + 7} ${f.y} L ${f.x + 2} ${f.y + 2} L ${f.x} ${f.y + 7} L ${f.x - 2} ${f.y + 2} L ${f.x - 7} ${f.y} L ${f.x - 2} ${f.y - 2} Z`} className="fx-spark" style={st} />;
           if (f.kind === 'splinter') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><rect x={-2} y={-7} width={4} height={13} rx={2} className="fx-splinter" fill={COLOR_HEX[f.color]} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg` }} /></g>;
           return <circle key={f.id} cx={f.x} cy={f.y} r={9 * (f.r ?? 1)} className="fx-confetti" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;

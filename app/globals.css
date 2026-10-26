@@ -665,3 +665,29 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .tokske .tk-body, .tokske .tk-swirl, .tokske .tk-eyes, .tokske .tk-tear, .tokske .tk-sparkle, .tk-bubble { animation: none !important; }
 }
+
+/* ---------- uitdelen ---------- */
+.board .fx-deal { opacity: 0; animation: fx-deal var(--dur, 300ms) cubic-bezier(.25,.75,.35,1) both; }
+@keyframes fx-deal {
+  0% { opacity: 0; transform: translate(0, 0) rotate(0deg) scale(1.05); }
+  10% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(.7); }
+}
+.board .fx-deck { animation: fx-deck var(--dur, 1200ms) ease-in both; }
+.board .fx-deck rect:nth-child(odd) { animation: fx-riffle .42s ease-in-out 1; transform-box: fill-box; transform-origin: center; }
+.board .fx-deck rect:nth-child(even) { animation: fx-riffle2 .42s ease-in-out 1; transform-box: fill-box; transform-origin: center; }
+@keyframes fx-deck { 0% { opacity: 0; transform: scale(.85); } 8% { opacity: 1; transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: scale(.6); } }
+@keyframes fx-riffle { 30% { transform: translateX(-22px) rotate(-8deg); } 70% { transform: translateX(-6px) rotate(-2deg); } }
+@keyframes fx-riffle2 { 30% { transform: translateX(22px) rotate(8deg); } 70% { transform: translateX(6px) rotate(2deg); } }
+/* je eigen kaarten komen één voor één binnen, gelijk met het delen */
+.hand.dealing > .pcard { animation: deal-card .36s cubic-bezier(.2,1.2,.4,1) backwards; }
+@keyframes deal-card { 0% { opacity: 0; transform: translateY(-60px) rotateY(90deg) scale(.7); } 60% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+.hand.dealing > .pcard:nth-child(1) { animation-delay: calc(var(--shuffle) + (var(--off) + 0) * var(--gap) + var(--fly)); }
+.hand.dealing > .pcard:nth-child(2) { animation-delay: calc(var(--shuffle) + (var(--off) + 4) * var(--gap) + var(--fly)); }
+.hand.dealing > .pcard:nth-child(3) { animation-delay: calc(var(--shuffle) + (var(--off) + 8) * var(--gap) + var(--fly)); }
+.hand.dealing > .pcard:nth-child(4) { animation-delay: calc(var(--shuffle) + (var(--off) + 12) * var(--gap) + var(--fly)); }
+.hand.dealing > .pcard:nth-child(5) { animation-delay: calc(var(--shuffle) + (var(--off) + 16) * var(--gap) + var(--fly)); }
+.hand.dealing > .pcard:nth-child(6) { animation-delay: calc(var(--shuffle) + (var(--off) + 20) * var(--gap) + var(--fly)); }
+.hand.dealing > .pcard:nth-child(7) { animation-delay: calc(var(--shuffle) + (var(--off) + 24) * var(--gap) + var(--fly)); }
+@media (prefers-reduced-motion: reduce) { .hand.dealing > .pcard { animation: none; } }

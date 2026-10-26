@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } from 'react';
 import Link from 'next/link';
 import {
   playedCardThisRound, movesForRank, sevenNext, applySevenSteps, rankHasMove, handHasMove, needsFreeExit, controlledColor, posEq,
@@ -13,7 +13,7 @@ import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import Chat from './Chat';
 import SoundToggle, { SpeedPicker, MascotToggle } from './SoundToggle';
 import { TokskeCommentator } from './Tokske';
-import { moveDuration } from '@/lib/board';
+import { moveDuration, dealDuration, dealTiming, SHUFFLE_MS } from '@/lib/board';
 import { getSpeed } from '@/lib/prefs';
 import CardFace, { RANK_ORDER, rankName } from './CardFace';
 
@@ -117,7 +117,7 @@ export default function Room({ code }: { code: string }) {
     if (!botTurn || !token || !game) return;
     const tm = setTimeout(() => {
       api<{ game?: GameRow; me?: Me }>({ op: 'botStep', code, token, version: game.version }).then(accept).catch(() => {});
-    }, Math.max(850, moveDuration(game.state?.last ?? null, game.state?.pieces ?? [], getSpeed()) + 300) + Math.random() * 300);
+    }, Math.max(850, moveDuration(game.state?.last ?? null, game.state?.pieces ?? [], getSpeed()) + 300) + (game.state && (game.state.log.length === 0 || game.state.log.at(-1)!.round !== game.state.round) ? dealDuration(getSpeed()) : 0) + Math.random() * 300);
     return () => clearTimeout(tm);
   }, [botTurn, token, me?.seat, game, code, accept]);
 
@@ -269,6 +269,21 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const hand = useMemo(() => (me?.hand ?? []).slice().sort((a, b) => RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.suit.localeCompare(b.suit)), [me?.hand]);
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
+  // nieuwe ronde (of nieuw spel): kaarten uitdelen met animatie
+  const [dealRound, setDealRound] = useState<number | null>(null);
+  const seenRound = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    const r = pub.round;
+    if (game.status !== 'playing') { seenRound.current = r; return; }
+    const fresh = seenRound.current === null ? pub.log.length === 0 : r !== seenRound.current;
+    seenRound.current = r;
+    if (fresh) setDealRound(r);
+  }, [pub.round, pub.log.length, game.status]);
+  const dealVars = (() => {
+    const { gap, fly } = dealTiming(getSpeed());
+    const off = seat === null ? 0 : (seat - pub.dealer + 3) % 4;
+    return { ['--gap' as string]: `${gap}ms`, ['--fly' as string]: `${fly}ms`, ['--shuffle' as string]: `${SHUFFLE_MS}ms`, ['--off' as string]: off } as React.CSSProperties;
+  })();
 
   const [selCard, setSelCard] = useState<number | null>(null);
   const [selPiece, setSelPiece] = useState<number | null>(null);
@@ -491,6 +506,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
             highlightPieces={hlPieces} highlightHoles={hlHoles} selectedPiece={selPiece} ghosts={ghosts}
             onPiece={onPiece} onHole={onHole}
             moveKey={lastLogNumber(pub)} winner={pub.winner} mySeat={seat}
+            deal={dealRound !== null ? { round: dealRound, dealer: pub.dealer } : null}
           />
           </div>
         </div>
@@ -545,7 +561,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
               <button className="btn small" onClick={() => setSeven(seven.slice(0, -1))}>{t.undo}</button>
             )}
           </div>
-          <div className="hand">
+          <div className={`hand ${dealRound === pub.round ? 'dealing' : ''}`} key={`hand-${dealRound ?? 0}`} style={dealVars}>
             {hand.map((c) => (
               <CardFace key={c.id} card={c} lang={lang} selected={selCard === c.id} laid={false}
                 dim={mode === 'training' && myTurn && !playable.has(c.id)} onClick={() => pickCard(c)} />

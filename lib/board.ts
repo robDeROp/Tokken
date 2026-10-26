@@ -143,3 +143,13 @@ export function moveDuration(last: LastMove | null, pieces: Piece[], speed: Spee
   if (!last) return 0;
   return planMove(last, pieces, null, () => 0, () => 0, speed).total;
 }
+
+// ---------- kaarten uitdelen ----------
+export const DEAL_CARDS = 28;   // 7 per speler
+export const SHUFFLE_MS = 420;  // eerst schudden, dan delen
+const DEAL: Record<Speed, { gap: number; fly: number }> = {
+  fast: { gap: 18, fly: 220 }, normal: { gap: 32, fly: 300 }, calm: { gap: 52, fly: 380 }, slow: { gap: 72, fly: 460 },
+};
+export const dealTiming = (s: Speed) => DEAL[s];
+/** Hoe lang het uitdelen duurt (de computer wacht zolang). */
+export const dealDuration = (s: Speed) => SHUFFLE_MS + DEAL_CARDS * DEAL[s].gap + DEAL[s].fly + 150;
