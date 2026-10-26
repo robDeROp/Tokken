@@ -45,6 +45,7 @@ const stats = { turns: 0, plays: 0, discards: 0, freeExits: 0, illegalRefused: 0
 
 for (let turn = 0; turn < turns; turn++) {
   await p.waitForFunction(() => (window.__tokken && window.__tokken.turn === 0) || window.__tokken?.winner != null, null, { timeout: 60000 });
+  await p.waitForTimeout(600); // wachten tot de knikkers uitgerold zijn
   let s = await st();
   if (s.winner != null) break;
   stats.turns++;

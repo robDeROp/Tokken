@@ -125,6 +125,12 @@ button { font: inherit; color: inherit; }
 .boot { min-height: 100vh; display: grid; place-items: center; }
 .boot-dot { width: 22px; height: 22px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff8 0 15%, var(--amber) 40%, #8a6d00); animation: pulse 1s ease-in-out infinite; }
 
+.prose { max-width: 720px; margin: 10px auto; line-height: 1.6; }
+.prose h2 { margin: 22px 0 6px; }
+.prose ul { padding-left: 1.2em; color: var(--text-dim); }
+.foot { text-align: center; margin-top: 26px; font-size: 0.82rem; }
+.foot a { color: var(--text-dim); }
+
 /* lobby */
 .lobby { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-top: 6px; }
 .lobby > div:last-child { grid-column: 1 / -1; }

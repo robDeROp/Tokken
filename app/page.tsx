@@ -120,6 +120,7 @@ export default function Home() {
         <h2>{t.rules}</h2>
         <ul>{t.rulesText.map((r, i) => <li key={i}>{r}</li>)}</ul>
       </section>
+      <p className="foot"><Link href="/privacy">Privacy</Link></p>
     </main>
   );
 }
