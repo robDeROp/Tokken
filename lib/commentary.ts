@@ -1,6 +1,6 @@
 // Tokske, de mascotte, geeft commentaar op wat er op het bord gebeurt.
 // Puur: krijgt de vorige en de nieuwe (publieke) stand en geeft (soms) een zinnetje terug.
-import { START, TRACK, teamOf, partnerOf, type Color, type LastMove, type Piece, type PublicState } from './engine';
+import { START, TRACK, ENTRY, teamOf, partnerOf, type Color, type LastMove, type Piece, type PublicState } from './engine';
 import type { Lang } from './i18n';
 
 export type Mood = 'happy' | 'shocked' | 'laugh' | 'sad' | 'cheeky' | 'proud' | 'think';
@@ -29,6 +29,8 @@ const L = {
     home: ['{A} zit veilig in het huisje.', 'Thuis is thuis, zegt {A}.', 'Hop, {A} parkeert er weer één.'],
     homeLast: ['{A} is helemaal binnen! Nu de maat helpen.', 'Alle vier binnen voor {A}! Bravo!'],
     youHome: ['Mooi! Weer eentje veilig thuis.', 'Ingeparkeerd! Netjes.'],
+    far: ['Wauw! {A} vliegt van {n} vakjes ver ineens het huisje in!', 'Wat een sprong! {A} gaat in één keer van ver naar binnen.', 'Hole in one! {A} schiet zo het huisje in.'],
+    youFar: ['Wauw! Van {n} vakjes ver ineens in je huisje!', 'Hole in one! Jij schiet zo het huisje in.'],
     stick: ['{A} gooit alles weg en krijgt een stokje.', 'Stokje voor {A}. Nog één en hij komt gratis buiten!'],
     freeExit: ['Gratis buiten! Twee stokjes doen wonderen voor {A}.'],
     swap: ['Boer! {A} doet een stoelendans.', 'Hop, van plaats gewisseld! {A} speelt vuil.', 'Wissel! {A} pikt een betere plek in.'],
@@ -57,6 +59,8 @@ const L = {
     home: ['{A} is safe in the house.', 'Home sweet home, says {A}.', '{A} parks another one.'],
     homeLast: ['{A} is all in! Now help your partner.', 'All four home for {A}! Bravo!'],
     youHome: ['Nice! Another one safe at home.', 'Parked! Neat.'],
+    far: ['Wow! {A} flies {n} squares straight into the house!', 'What a jump! {A} goes home from far away.', 'Hole in one! {A} shoots straight into the house.'],
+    youFar: ['Wow! {n} squares straight into your house!', 'Hole in one! Straight into your house.'],
     stick: ['{A} throws everything away and gets a stick.', 'A stick for {A}. One more and it comes out for free!'],
     freeExit: ['Free exit! Two sticks work wonders for {A}.'],
     swap: ['Jack! {A} plays musical chairs.', 'Swapped! {A} plays dirty.', 'Swap! {A} grabs a better spot.'],
@@ -99,14 +103,8 @@ export class Commentator {
     this.sinceLine++;
     const l = this.raw(prev, cur);
     if (!l) return null;
-    const quiet = this.sinceLine;
-    const ok =
-      l.prio >= 9 ? quiet >= 2 :                          // winst, jij slaat / wordt geslagen, killstreak
-      l.prio >= 8 ? quiet >= 4 :                          // eigen maat, dubbele kill, bijna-thuis
-      l.prio >= 7 ? quiet >= 6 && Math.random() < 0.5 :   // gewone kill, iemand helemaal binnen
-      l.prio >= 4 ? quiet >= 12 && Math.random() < 0.3 :  // huisje, stokje, wissel
-      quiet >= 20 && Math.random() < 0.35;                // weetjes en tips
-    if (!ok && l.prio < 10) return null;
+    // enkel hoogtepunten; een gewone kill niet als hij net nog iets zei
+    if (l.prio <= 7 && this.sinceLine < 3) return null;
     this.sinceLine = 0;
     return l;
   }
@@ -147,26 +145,14 @@ export class Commentator {
       return say(T.kill, 'shocked', 7, { V });
     }
 
-    if (last.kind === 'discardAll' && last.earnsStick) return say(T.stick, 'think', 4);
-    if (last.kind === 'freeExit') return say(T.freeExit, 'happy', 5);
-    if (last.moves.some((m) => m.to.t === 'lane' && m.from.t !== 'lane')) {
-      const col = cur.pieces[last.moves.find((m) => m.to.t === 'lane')!.piece].color;
-      const hc = homeCount(cur.pieces, col);
-      if (hc === 4) return say(T.homeLast, 'proud', 7, { A: this.who(col) });
-      if (this.me === col) return say(T.youHome, 'happy', 5);
-      if (Math.random() < 0.6) return say(T.home, 'happy', 4, { A: this.who(col) });
-      const team = teamOf(col);
-      const both = homeCount(cur.pieces, col) + homeCount(cur.pieces, partnerOf(col));
-      if (both >= 6) return say(T.close, 'cheeky', 5, { T: this.lang === 'nl' ? `Ploeg ${this.who(col)}` : `Team ${this.who(col)}`, n: both, team });
-    }
-    if (last.swap && Math.random() < 0.7) return say(T.swap, 'cheeky', 4);
-    if (last.rank === '7' && last.moves.length > 1 && Math.random() < 0.5) return say(T.seven, 'think', 3);
-    if (last.rank === '4' && last.moves.length === 1 && last.moves[0].from.t === 'track' && Math.random() < 0.4) return say(T.back4, 'cheeky', 3);
-    if (last.moves.some((m) => m.from.t === 'kot') && Math.random() < 0.25) return say(T.out, 'happy', 2);
-    if (last.kind === 'discardAll' && Math.random() < 0.3) return say(T.discard, 'laugh', 2);
-    if (this.sinceLine > 20) {
-      if (this.training && Math.random() < 0.7) return say(T.tips, 'think', 1);
-      return say(T.idle, 'cheeky', 1);
+    // van ver ineens in het huisje, of iemand helemaal binnen
+    const intoHome = last.moves.find((m) => m.to.t === 'lane' && m.from.t === 'track');
+    if (intoHome) {
+      const col = cur.pieces[intoHome.piece].color;
+      if (homeCount(cur.pieces, col) === 4) return say(T.homeLast, 'proud', 8, { A: this.who(col) });
+      const from = intoHome.from as { t: 'track'; i: number }, to = intoHome.to as { t: 'lane'; k: number };
+      const dist = ((ENTRY(col) - from.i + TRACK) % TRACK) + to.k + 1;
+      if (dist >= 9) return say(this.me === col ? T.youFar : T.far, 'proud', 8, { A: this.who(col), n: dist });
     }
     return null;
   }
