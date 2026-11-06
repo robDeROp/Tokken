@@ -66,13 +66,12 @@ for (let turn = 0; turn < turns; turn++) {
   }
 
   if (!chosen) {
-    if (!(await p.$('text=Ik kan niet spelen'))) {
+    if (!(await p.$('.discard .discard-all'))) {
       await p.screenshot({ path: `${out}pro-nobutton.png` });
       console.log('no button; hand', JSON.stringify(s.hands[0].map((h) => h.rank)), 'sticks', s.sticks, 'freeDone', s.freeExitDone, 'laid', s.laid, 'status', await p.$eval('.status', (e) => e.innerText));
     }
-    if (await p.$('text=Ik kan niet spelen')) await p.click('text=Ik kan niet spelen');
     await clickCard(0);
-    await p.click('text=Gooi deze kaart weg');
+    await p.click('.discard .discard-one');
     stats.discards++;
   } else {
     const idx = await cardIndex(s, chosen.card.id);

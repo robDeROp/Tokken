@@ -28,6 +28,8 @@ Oefenen tegen de computer (`/oefenen`) werkt volledig in de browser, zonder serv
   Bij Oefenen kies je het niveau per computer (ploegmaat en beide tegenstanders apart); in een online kamer per computer-stoel in de lobby.
 - **Rating (Elo, zoals bij schaken)**: één rating per Google-account, start op 1000. Ploegrating = gemiddelde van beide spelers;
   computers tellen mee met een vaste rating per niveau (450 / 700 / 1000 / 1130 / 1210). K = 40 voor je eerste 10 spellen, daarna 24.
+  Binnen een ploeg telt je bijdrage: de engine houdt bij hoeveel pionnen elke speler zelf binnenbracht (`homeBy`);
+  factor = 0,5 + jouw aandeel (0,5 … 1,5). Bij winst punten × factor, bij verlies punten × (2 − factor).
   Berekend in de database (`apply_match_result` in `supabase/migrations/0005_ratings.sql`), na elk uitgespeeld online spel (server) en oefenspel (`finish_practice`).
 - **Bot-ratings opnieuw meten** na een wijziging aan de computers:
   `node --experimental-strip-types scripts/level-tournament.ts 3 2 400` (niveau A tegen B, toont het Elo-verschil).
@@ -46,8 +48,9 @@ de winstkans van elke mogelijke zet en kiezen de beste. Het netwerk leerde dat d
 
 Persoonlijkheden: **Jules** maakt vaker kleine foutjes en gooit alles af zoals veel mensen; **Mia** maakt af en toe een
 klein foutje; **Staf** neemt altijd de beste zet; **Bompa Fons** denkt de beste zetten door in 12 mogelijke werelden
-(de kaarten die hij niet ziet, willekeurig verdeeld). Alle AI's gooien één per één af (pas de laatste kaart als
-"alles", voor het stokje) en slaan hun ploegmaat enkel als het duidelijk loont.
+(de kaarten die hij niet ziet, willekeurig verdeeld). Een stokje krijg je enkel als "alles afgooien"
+je eerste actie van de ronde is; de AI's houden hun kaarten dus alleen bij (één per één afgooien) als hun ploegmaat
+hen deze ronde nog kan buitenspelen, en slaan hun ploegmaat enkel als het duidelijk loont.
 
 Ratings van de computers starten op de gemeten waarden en schuiven daarna mee met spellen tegen mensen (K = 5 per bot-stoel).
 

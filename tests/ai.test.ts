@@ -42,6 +42,13 @@ test('slim afgooien: niet alles weggooien zolang je ploegmaat je nog kan buitens
   }
 });
 
+test('slim afgooien: niks te verwachten van je ploegmaat = meteen alles afgooien (stokje)', () => {
+  const st = stuckState(['2', '3', '6', '9', 'Q']);
+  // ploegmaat heeft niks binnen: wachten heeft geen zin
+  st.pieces[8].pos = { t: 'track', i: 40 }; st.pieces[9].pos = { t: 'kot' }; st.pieces[10].pos = { t: 'kot' };
+  for (const p of AI_PERSONAS) assert.equal(aiAction(st, 0, p, mulberry(1)).type, 'discardAll', p.name);
+});
+
 test('slim afgooien: met je laatste kaart alles afgooien (voor het stokje)', () => {
   const st = stuckState(['9']);
   const a = aiAction(st, 0, personaOf(9)!, mulberry(1));
@@ -52,6 +59,15 @@ test('namen aan tafel: robots naar hun stoel, AI naar persoonlijkheid, dubbel = 
   assert.equal(botSeatName('Robot Rik', 3), 'Robot Rik');
   assert.equal(botSeatName('Robot Rik', 9), 'Bompa Fons');
   assert.equal(botSeatName('Robot Bert', 7, ['Mia']), 'Mia 2');
+});
+
+test('vooruitdenken verandert de echte stand niet', () => {
+  const rng = mulberry(42);
+  const st = newGame('training', rng);
+  for (let i = 0; i < 40 && st.winner === null; i++) applyAction(st, st.turn, botMove(st, st.turn, 5, rng));
+  const before = JSON.stringify(st);
+  botMove(st, st.turn, 9, rng);
+  assert.equal(JSON.stringify(st), before);
 });
 
 console.log(`${passed} AI-tests OK`);

@@ -202,6 +202,18 @@ test('na drie kaartzetten alles afgooien geeft geen stokje', () => {
   assert.equal((st.log.at(-1) as { earnsStick?: boolean }).earnsStick, false);
 });
 
+test('eerst één kaart afgooien en dan de rest: geen stokje meer', () => {
+  const st = newGame('pro', mulberry(33));
+  st.pieces = emptyPieces();
+  st.turn = 0;
+  st.hands[0] = [{ id: 900, rank: '2', suit: 'S' }, { id: 901, rank: '3', suit: 'S' }];
+  applyAction(st, 0, { type: 'discardOne', card: 900 });
+  st.turn = 0;
+  applyAction(st, 0, { type: 'discardAll' });
+  assert.equal(st.sticks[0], 0);
+  assert.equal((st.log.at(-1) as { earnsStick?: boolean }).earnsStick, false);
+});
+
 test('gestarte partij reconstrueert rondegeschiedenis', () => {
   const st = newGame('training', mulberry(32));
   st.pieces = emptyPieces(); st.pieces[0].pos = tr(5); st.pieces[4].pos = tr(START(1)); st.turn = 0;
@@ -345,6 +357,20 @@ test('niveaus: ratings stijgen met het niveau, onbekend niveau = Gemiddeld', () 
   assert.equal(asLevel('10'), 3);
   assert.equal(asLevel('9'), 9);
   assert.equal(asLevel('1'), 1);
+});
+
+test('bijdrage: binnengebrachte pionnen per speler tellen op tot 8 bij de winnende ploeg', () => {
+  for (let g = 0; g < 20; g++) {
+    const rng = mulberry(g + 901);
+    const st = newGame('training', rng);
+    let guard = 0;
+    while (st.winner === null && guard++ < 8000) { const c = st.turn; applyAction(st, c, botActionLevel(st, c, 4, rng)); }
+    const w = st.winner!;
+    const h = st.homeBy!;
+    // 4 + 4 pionnen van de winnaars kwamen binnen via hun eigen zetten (tegenstanders kunnen met een 5 meeduwen)
+    assert.ok(h[w] + h[w + 2] <= 8 && h[w] + h[w + 2] >= 6, `winnaars ${h}`);
+    assert.ok(h[1 - w] + h[3 - w] <= 7, `verliezers ${h}`);
+  }
 });
 
 console.log(`${passed} tests OK`);

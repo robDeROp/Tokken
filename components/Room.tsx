@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useLayoutEffect } fr
 import Link from 'next/link';
 import {
   playedCardThisRound, movesForRank, sevenNext, applySevenSteps, rankHasMove, handHasMove, needsFreeExit, controlledColor, posEq,
-  START,
+  START, isAiLevel,
   type Card, type Color, type Move, type Pos, type PublicState, type Mode,
 } from '@/lib/engine';
 import { sb, api, ApiError, getToken, setToken, getName, setName } from '@/lib/supabase';
@@ -311,7 +311,6 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const [selCard, setSelCard] = useState<number | null>(null);
   const [selPiece, setSelPiece] = useState<number | null>(null);
   const [seven, setSeven] = useState<Step[]>([]);
-  const [showDiscard, setShowDiscard] = useState(false);
   const [showRules, setShowRules] = useState(false);
   const [showControls, setShowControls] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -336,7 +335,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   useEffect(() => {
     if (lastTurnKey.current !== turnKey) {
       lastTurnKey.current = turnKey;
-      setSelPiece(null); setSeven([]); setShowDiscard(false);
+      setSelPiece(null); setSeven([]);
       setSelCard(null);
     }
   }, [turnKey, pub.laid, pub.turn, seat]);
@@ -346,6 +345,9 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const card = hand.find((h) => h.id === selCard) ?? null;
   const rank = card?.rank ?? null;
   const free = myTurn && seat !== null && needsFreeExit(pub.pieces, seat, pub.sticks[seat], pub.freeExitDone, hand);
+  /** Je kan niks meer spelen (schuiven in je huisje telt niet): dan mag je afgooien. */
+  const stuck = myTurn && !free && seat !== null && hand.length > 0 && !handHasMove(pub.pieces, seat, hand);
+  const discardOne = (c: Card) => call({ op: 'act', action: { type: 'discardOne', card: c.id } });
 
   const moves: Move[] = useMemo(() => (myTurn && seat !== null && rank && rank !== '7' ? movesForRank(pub.pieces, seat, rank).map((g) => g.move) : []), [myTurn, seat, rank, pub.pieces]);
   const sevenState = useMemo(() => (myTurn && seat !== null && rank === '7' ? applySevenSteps(pub.pieces, seat, seven) : null), [myTurn, seat, rank, pub.pieces, seven]);
@@ -398,12 +400,14 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const pickCard = async (c: Card) => {
     if (!myTurn || busy) return;
     if (free) { err('free_exit_first'); return; }
+    // vastgelopen: tweede klik op de gekozen kaart gooit ze af
+    if (stuck && selCard === c.id) { discardOne(c); return; }
     setMsg('');
     setSeven([]);
     const candidates = c.rank === '7' ? sevenNext(pub.pieces, seat!, []) : movesForRank(pub.pieces, seat!, c.rank).map((g) => g.move).filter((m) => m.kind !== 'seven');
     const ids = new Set(candidates.map((m) => m.piece));
     setSelPiece(ids.size === 1 && mode !== 'pro' ? [...ids][0] : null);
-    setSelCard(selCard === c.id ? null : c.id);
+    setSelCard(stuck ? c.id : selCard === c.id ? null : c.id);
   };
 
   const tryDest = (pos: Pos, laneColor?: Color): boolean => {
@@ -484,6 +488,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   let hint = '';
   if (myTurn) {
     if (free) hint = t.freeExit;
+    else if (stuck && !card) hint = t.stuckHint;
+    else if (stuck && card && !playable.has(card.id)) hint = t.stuckConfirm;
     else if (!card) hint = t.pickCard;
     else if (rank === '7') hint = t.sevenLeft(sevenState?.remaining ?? 7);
     else if (rank === 'J' && selPiece !== null) hint = t.pickSwap;
@@ -530,6 +536,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
             onPiece={onPiece} onHole={onHole}
             moveKey={lastLogNumber(pub)} winner={pub.winner} mySeat={seat}
             deal={dealRound !== null ? { round: dealRound, dealer: pub.dealer } : null}
+            dealer={pub.dealer}
+            seatKinds={game.seats.map((x) => (!x ? null : !x.bot ? 'human' : isAiLevel(x.level ?? 0) ? 'ai' : 'robot'))}
           />
           </div>
         </div>
@@ -588,24 +596,16 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           <div className={`hand ${dealRound === pub.round ? 'dealing' : ''}`} key={`hand-${dealRound ?? 0}`} style={dealVars}>
             {hand.map((c) => (
               <CardFace key={c.id} card={c} lang={lang} selected={selCard === c.id} laid={false}
-                dim={mode === 'training' && myTurn && !playable.has(c.id)} onClick={() => pickCard(c)} />
+                dim={mode === 'training' && myTurn && !stuck && !playable.has(c.id)} onClick={() => pickCard(c)}
+                discard={stuck && selCard === c.id} discardLabel={t.discardTag} />
             ))}
             {hand.length === 0 && <span className="muted">—</span>}
           </div>
-          {myTurn && !free && hand.length > 0 && (
+          {stuck && (
             <div className="discard">
-              {!showDiscard ? (
-                <button className="btn ghost" onClick={() => {
-                  if (seat !== null && handHasMove(pub.pieces, seat, hand)) { err('must_play'); return; }
-                  setShowDiscard(true);
-                }}>{t.cantPlay}</button>
-              ) : (
-                <>
-                  <button className="btn" disabled={!card || busy} onClick={() => card && call({ op: 'act', action: { type: 'discardOne', card: card.id } })}>{t.discardOne}</button>
-                  <button className="btn" disabled={busy} onClick={() => call({ op: 'act', action: { type: 'discardAll' } })}>{t.discardAll}</button>
-                  <p className="small muted">{seat !== null && playedCardThisRound(pub, seat) ? t.discardAllNoStick : t.discardAllHelp}</p>
-                </>
-              )}
+              <button className="btn discard-one" disabled={!card || busy} onClick={() => card && discardOne(card)}>{t.discardOne}</button>
+              <button className="btn discard-all" disabled={busy} onClick={() => call({ op: 'act', action: { type: 'discardAll' } })}>{t.discardAll}</button>
+              <p className="small">{seat !== null && playedCardThisRound(pub, seat) ? t.discardAllNoStick : t.discardAllHelp}</p>
             </div>
           )}
         </div>
@@ -618,6 +618,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
             <div className="win-dots">
               {[pub.winner, pub.winner + 2].map((c) => <span key={c} className="dot big" style={{ ['--c' as string]: COLOR_HEX[c] }} />)}
             </div>
+            {seat !== null && pub.homeBy && <p className="home-line">{t.homeLine(pub.homeBy[seat] ?? 0, pub.homeBy[(seat + 2) % 4] ?? 0)}</p>}
             {rating && <RatingResult r={rating} />}
             {isHost && <button className="btn primary" onClick={() => call({ op: 'rematch' })}>{rematchLabel ?? t.rematch}</button>}
           </div>
@@ -642,10 +643,16 @@ function RatingResult({ r }: { r: RatingInfo }) {
   if (r.state === 'loading') return <p className="muted small">{t.ratingLoading}</p>;
   if (r.state === 'login') return <p className="muted small">{t.ratingLogin}</p>;
   if (r.state === 'none') return <p className="muted small">{r.reason ?? t.ratingNone}</p>;
+  const me = r.homeMe, mate = r.homeMate;
+  const note = me === undefined || mate === undefined || me === mate ? null
+    : r.delta >= 0 ? (me > mate ? t.contribWinMore : t.contribWinLess) : (me > mate ? t.contribLossLess : t.contribLossMore);
   return (
-    <p className={`rating-result ${r.delta >= 0 ? 'up' : 'down'}`}>
-      {t.rating}: <strong>{r.before}</strong> → <strong>{r.after}</strong>
-      <span className="rating-delta">{r.delta >= 0 ? `+${r.delta}` : r.delta}</span>
-    </p>
+    <>
+      <p className={`rating-result ${r.delta >= 0 ? 'up' : 'down'}`}>
+        {t.rating}: <strong>{r.before}</strong> → <strong>{r.after}</strong>
+        <span className="rating-delta">{r.delta >= 0 ? `+${r.delta}` : r.delta}</span>
+      </p>
+      {note && <p className="muted small">{note}</p>}
+    </>
   );
 }

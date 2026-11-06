@@ -60,8 +60,10 @@ export interface State {
   freeExitDone: boolean;
   winner: Team | null;
   mode: Mode;
-  /** Whether this seat played any card in the current hand round. */
+  /** Deze speler speelde of gooide deze ronde al een kaart af: dan geeft alles afgooien geen stokje meer. */
   playedThisRound: boolean[];
+  /** Hoeveel pionnen van de eigen ploeg elke speler zelf zijn huisje in speelde (voor de rating). */
+  homeBy?: number[];
   moveNo: number;
   last: LastMove | null;
   log: LogEntry[];
@@ -135,6 +137,7 @@ export function newGame(mode: Mode, rng: () => number = Math.random): State {
     winner: null,
     mode,
     playedThisRound: [false, false, false, false],
+    homeBy: [0, 0, 0, 0],
     moveNo: 0,
     last: null,
     log: [],
@@ -367,7 +370,7 @@ export function rankHasMove(P: Piece[], c: Color, rank: Rank): boolean {
 /** Older saved games reconstruct this flag from their current-round action log. */
 export function playedCardThisRound(st: Pick<State, 'round' | 'log'> & Partial<Pick<State, 'playedThisRound'>>, c: Color): boolean {
   if (st.playedThisRound?.[c] !== undefined) return st.playedThisRound[c];
-  return st.log.some((entry) => entry.round === st.round && entry.by === c && entry.kind === 'play');
+  return st.log.some((entry) => entry.round === st.round && entry.by === c && (entry.kind === 'play' || entry.kind === 'discardOne'));
 }
 
 export function handHasMove(P: Piece[], c: Color, hand: Card[]): boolean {
@@ -480,6 +483,11 @@ export function applyAction(st: State, c: Color, a: Action): void {
       const card = hand[idx];
       const r = matchMove(st.pieces, c, card.rank, a.move);
       if (!r) throw new RuleError('illegal_move');
+      // bijdrage: eigen of ploegmaat-pionnen die door deze zet het huisje in gaan
+      if (!Array.isArray(st.homeBy)) st.homeBy = [0, 0, 0, 0];
+      for (const tr of r.traces) {
+        if (tr.from.t !== 'lane' && tr.to.t === 'lane' && teamOf(st.pieces[tr.piece].color) === teamOf(c)) st.homeBy[c]++;
+      }
       st.pieces = r.P;
       hand.splice(idx, 1);
       st.center.push({ card, hidden: false, by: c });
@@ -496,6 +504,8 @@ export function applyAction(st: State, c: Color, a: Action): void {
       if (handHasMove(st.pieces, c, hand)) throw new RuleError('must_play');
       const [card] = hand.splice(idx, 1);
       st.center.push({ card, hidden: false, by: c });
+      // een stokje krijg je enkel als "alles afgooien" je eerste actie van de ronde is
+      st.playedThisRound[c] = true;
       pushLog(st, { by: c, kind: 'discardOne', rank: card.rank, moves: [], kills: [] });
       endTurn(st);
       return;

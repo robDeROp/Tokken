@@ -3,7 +3,7 @@
 // de AI probeert alle zetten en kiest de beste, of (bij de menselijkere AI's) soms de op één na beste.
 // Getraind met scripts/ai-train/*. Gewichten in ai-weights.ts. Gedeeld door website en server.
 import {
-  START, ENTRY, TRACK, COLORS, teamOf, allInLane, teamDone, pieceAtTrack, makeDeck, applyAction,
+  START, ENTRY, TRACK, COLORS, teamOf, partnerOf, allInLane, teamDone, pieceAtTrack, makeDeck, applyAction,
   handHasMove, needsFreeExit, allMovesForCard, matchMove, progress, hitChance, botActionLevel, asLevel, BOT_LEVEL_NAME,
   type State, type Piece, type Color, type Card, type Rank, type Action, type Team, type BotLevel,
 } from './engine.ts';
@@ -136,7 +136,8 @@ export function candidates(st: State, c: Color, rng: () => number, max7 = 120): 
       if (seenD.has(card.rank)) continue;
       seenD.add(card.rank);
       const handCounts = b.handCounts.slice(); handCounts[c]--;
-      out.push({ a: { type: 'discardOne', card: card.id }, view: { ...b, pieces: st.pieces, hand: hand.filter((h) => h.id !== card.id), handCounts } });
+      const played = b.played.slice(); played[c] = true;
+      out.push({ a: { type: 'discardOne', card: card.id }, view: { ...b, pieces: st.pieces, hand: hand.filter((h) => h.id !== card.id), handCounts, played } });
     }
     const handCounts = b.handCounts.slice(); handCounts[c] = 0;
     const sticks = b.sticks.slice(); if (!b.played[c]) sticks[c]++;
@@ -161,7 +162,8 @@ export function viewAfter(st: State, c: Color, a: Action): View | null {
   }
   if (a.type === 'discardOne') {
     const handCounts = b.handCounts.slice(); handCounts[c]--;
-    return { ...b, pieces: st.pieces, hand: hand.filter((h) => h.id !== a.card), handCounts };
+    const played = b.played.slice(); played[c] = true;
+    return { ...b, pieces: st.pieces, hand: hand.filter((h) => h.id !== a.card), handCounts, played };
   }
   if (a.type === 'discardAll') {
     const handCounts = b.handCounts.slice(); handCounts[c] = 0;
@@ -184,6 +186,7 @@ export function sampleWorld(st: State, c: Color, rng: () => number): State {
   return {
     ...st, pieces: st.pieces.map((p) => ({ ...p, pos: { ...p.pos } })), hands, deck: pool.slice(k, k + st.deck.length),
     center: st.center.slice(), sticks: st.sticks.slice(), playedThisRound: (st.playedThisRound ?? [false, false, false, false]).slice(),
+    homeBy: (st.homeBy ?? [0, 0, 0, 0]).slice(),
     log: [], last: null,
   };
 }
@@ -221,6 +224,24 @@ function lookahead(st: State, c: Color, a: Action, seed: number, net: Net | null
   if (w.winner !== null) return w.winner === teamOf(c) ? 1 : 0;
   const v = valueOf(viewOfState(w, last), last, net);
   return teamOf(last) === teamOf(c) ? v : 1 - v;
+}
+
+/** Kunnen mijn kaarten deze ronde nog nut hebben als ik nu niet kan spelen? */
+export function waitingPays(st: State, c: Color): boolean {
+  const P = st.pieces;
+  // Wachten kost je stokje (dat krijg je enkel als alles afgooien je eerste actie van de ronde is);
+  // het loont alleen als je ploegmaat je deze ronde nog kan buitenspelen.
+  if (P.some((p) => p.color === c && p.pos.t === 'kot') === false) return false;
+  const mate = partnerOf(c);
+  if (st.hands[mate].length === 0) return false; // ploegmaat is deze ronde al klaar met spelen
+  // ploegmaat is klaar en speelt met mijn pionnen: hij kan mij met een aas of koning buitenzetten
+  if (allInLane(P, mate)) return true;
+  // ploegmaat heeft er 3 binnen en de laatste staat vlak voor zijn huisje
+  const his = P.filter((p) => p.color === mate);
+  if (his.filter((p) => p.pos.t === 'lane').length < 3) return false;
+  const last = his.find((p) => p.pos.t === 'track');
+  if (!last || last.pos.t !== 'track') return false;
+  return (ENTRY(mate) - last.pos.i + TRACK) % TRACK <= 13;
 }
 
 // ---------- persoonlijkheden ----------
@@ -272,11 +293,12 @@ export function aiAction(st: State, c: Color, persona: Persona, rng: () => numbe
     return { type: 'freeExit', piece: p.id };
   }
   let cands = candidates(st, c, rng);
-  if (persona.smartDiscard && hand.length > 1) {
-    // Alles afgooien heeft enkel zin met je laatste kaart: één per één afgooien levert op het einde
-    // hetzelfde stokje op, maar je houdt je kaarten voor als je ploegmaat je pionnen buitenspeelt.
-    const keep = cands.filter((cd) => cd.a.type !== 'discardAll');
-    if (keep.length) cands = keep;
+  if (cands.some((cd) => cd.a.type === 'discardAll')) {
+    // Vastgelopen. Kaarten bijhouden (één per één afgooien, de laatste als "alles" voor het stokje)
+    // loont enkel als ze deze ronde nog iets kunnen doen; anders meteen alles afgooien.
+    const wait = persona.smartDiscard && hand.length > 1 && waitingPays(st, c);
+    const pick = cands.filter((cd) => (wait ? cd.a.type !== 'discardAll' : cd.a.type !== 'discardOne'));
+    if (pick.length) cands = pick;
   }
   if (!cands.length) return { type: 'discardAll' };
   if (persona.think && cands.length > 1) {

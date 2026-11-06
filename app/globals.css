@@ -713,3 +713,40 @@ body {
 .leaderboard li b { font-size: 1.05rem; }
 .leaderboard li.lb-bot { background: transparent; border: 1px dashed #c9b391; color: #5f5040; padding: 5px 10px; }
 .leaderboard li.lb-me { outline: 2px solid var(--yellow); }
+.win .home-line { font-weight: 600; margin: 4px 0; }
+
+/* ---------- afgooien als je vastzit ---------- */
+.pcard.discard-pick { outline: 3px solid var(--red); background: #fbe3df; transform: translateY(-14px) rotate(-3deg); }
+.pcard.discard-pick .discard-tag { position: absolute; left: 50%; bottom: 4px; transform: translateX(-50%); background: var(--red); color: #fff;
+  font: 700 .68rem var(--font-ui); padding: 2px 7px; border-radius: 999px; white-space: nowrap; letter-spacing: .01em; z-index: 1; }
+.discard .btn.discard-one:not(:disabled) { background: #fbe3df; border-color: var(--red); color: var(--red); box-shadow: 0 3px 0 var(--red); }
+.discard .btn.discard-all { background: var(--red); border-color: #7a140f; color: #fff; box-shadow: 0 3px 0 #7a140f; }
+.discard .btn:disabled { opacity: .5; }
+
+/* ---------- figuurtjes, beurt-token, deler ---------- */
+.board .seat-avatar { pointer-events: none; }
+.board .seat-avatar .av-body { transform-box: fill-box; transform-origin: 50% 100%; }
+.board .seat-avatar.active .av-body { animation: av-hop 1.1s ease-in-out infinite; }
+@keyframes av-hop { 0%, 100% { transform: translateY(0) scale(1); } 45% { transform: translateY(-7px) scale(1.04, .98); } 60% { transform: translateY(0) scale(1.06, .94); } }
+.board .seat-avatar .av-shadow { fill: #000; opacity: .18; }
+.board .seat-avatar .av-eye { fill: #fffdf6; stroke: #2a1a0c; stroke-width: 1.3; }
+.board .seat-avatar .av-pupil { fill: #1e1206; }
+.board .seat-avatar .av-line { fill: none; stroke: #2a1a0c; stroke-width: 2.4; stroke-linecap: round; }
+.board .seat-avatar .av-line.thin { stroke-width: 1.8; }
+.board .seat-avatar .av-antenna { stroke: #4a3a2a; stroke-width: 3; stroke-linecap: round; }
+.board .seat-avatar .av-spark { fill: #fff3b0; stroke: #b88a00; stroke-width: 1; }
+.board .turn-token { transition: transform .5s cubic-bezier(.45,0,.2,1); pointer-events: none; }
+.board .turn-token .tt-rim { fill: #8a5a2f; stroke: #5a3818; stroke-width: 2; }
+.board .turn-token .tt-face { fill: #f5cf2e; stroke: #9c7d00; stroke-width: 1.5; }
+.board .turn-token text { font: 800 12px var(--font-ui); fill: #4a3a00; text-anchor: middle; dominant-baseline: middle; letter-spacing: .02em; }
+.board .turn-token { animation: tt-pulse 1.6s ease-in-out infinite; }
+@keyframes tt-pulse { 0%, 100% { filter: drop-shadow(0 0 0 rgba(245, 207, 46, 0)); } 50% { filter: drop-shadow(0 0 8px rgba(245, 207, 46, .95)); } }
+.board .dealer-chip { transition: transform .5s cubic-bezier(.45,0,.2,1); pointer-events: none; }
+.board .dealer-chip text { font: 700 15px var(--font-ui); fill: #4a3626; text-anchor: middle; }
+.board .fx-label { animation: fx-deck var(--dur, 1200ms) ease-in both; }
+.board .fx-label rect { fill: #f5eddb; stroke-width: 3; }
+.board .fx-label text { font: 750 21px var(--font-ui); fill: #493c2d; text-anchor: middle; dominant-baseline: middle; }
+@media (prefers-reduced-motion: reduce) {
+  .board .seat-avatar.active .av-body, .board .turn-token { animation: none; }
+  .board .turn-token, .board .dealer-chip { transition: none; }
+}

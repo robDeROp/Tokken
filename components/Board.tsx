@@ -36,11 +36,22 @@ interface Props {
   winner?: number | null;
   /** jouw stoel (voor het belletje als je aan de beurt komt) */
   mySeat?: Color | null;
-  /** nieuwe ronde: kaarten uitdelen vanaf het midden (beginnend links van de deler) */
+  /** nieuwe ronde: kaarten uitdelen vanuit de deler (beginnend links van hem) */
   deal?: { round: number; dealer: Color } | null;
+  /** wie deze ronde deelt */
+  dealer?: Color;
+  /** soort speler per stoel, voor het figuurtje */
+  seatKinds?: (SeatKind | null)[];
 }
+export type SeatKind = 'human' | 'robot' | 'ai';
 
-type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number };
+// Plaatsen in de vrije hoek rechts van elk huisje (in de draaiing van die stoel)
+const AVATAR_AT: XY = [205, 452];
+const TOKEN_AT: XY = [290, 452];
+const DEALER_AT: XY = [362, 450];
+const DECK_AT: XY = [215, 320];
+
+type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
 let fxId = 0;
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -98,11 +109,16 @@ export default function Board(p: Props) {
     const { gap, fly } = dealTiming(speed.current);
     playDeal(DEAL_CARDS, gap, SHUFFLE_MS);
     if (reducedMotion()) return;
-    const items: Omit<Fx, 'id'>[] = [{ kind: 'deck', x: 0, y: 0, color: 0, delay: 0, dur: SHUFFLE_MS + DEAL_CARDS * gap + fly }];
+    // de deler schudt het pak voor zich en deelt van daaruit
+    const [dx0, dy0] = V(rot(DECK_AT, d.dealer));
+    const total = SHUFFLE_MS + DEAL_CARDS * gap + fly;
+    const items: Omit<Fx, 'id'>[] = [{ kind: 'deck', x: dx0, y: dy0, color: d.dealer, delay: 0, dur: total }];
+    const who = p.names[d.dealer];
+    if (who) items.push({ kind: 'label', x: dx0, y: dy0 - 66, color: d.dealer, delay: 0, dur: total, text: p.lang === 'nl' ? `${who} deelt` : `${who} deals` });
     for (let k = 0; k < DEAL_CARDS; k++) {
       const c = ((d.dealer + 1 + (k % 4)) % 4) as Color;
       const [tx, ty] = V(rot([-235 + (Math.floor(k / 4) - 3) * 9, 392], c));
-      items.push({ kind: 'deal', x: 0, y: 0, color: c, delay: SHUFFLE_MS + k * gap, dur: fly, dx: tx, dy: ty, r: (c % 2 ? 90 : 0) + (Math.random() * 30 - 15) + 360 });
+      items.push({ kind: 'deal', x: dx0, y: dy0, color: c, delay: SHUFFLE_MS + k * gap, dur: fly, dx: tx - dx0, dy: ty - dy0, r: (c % 2 ? 90 : 0) + (Math.random() * 30 - 15) + 360 });
     }
     addFx(items, SHUFFLE_MS + DEAL_CARDS * gap + fly + 600);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -356,6 +372,36 @@ export default function Board(p: Props) {
         </g>
       ))}
 
+      {/* figuurtjes van de spelers */}
+      {COLORS.map((c) => {
+        const kind = p.seatKinds?.[c];
+        if (!kind) return null;
+        const [x, y] = V(rot(AVATAR_AT, c));
+        return <SeatAvatar key={`av${c}`} c={c} kind={kind} x={x} y={y} active={p.turn === c} />;
+      })}
+      {/* de deler */}
+      {p.dealer !== undefined && (() => {
+        const [x, y] = V(rot(DEALER_AT, p.dealer));
+        return (
+          <g className="dealer-chip" style={{ transform: `translate(${x}px, ${y}px)` }} aria-label={p.lang === 'nl' ? 'deler' : 'dealer'}>
+            <rect x={-17} y={-26} width={22} height={32} rx={4} className="card-back" transform="rotate(-12)" />
+            <rect x={-6} y={-24} width={22} height={32} rx={4} className="card-back" transform="rotate(10)" />
+            <text x={0} y={26}>{p.lang === 'nl' ? 'deler' : 'dealer'}</text>
+          </g>
+        );
+      })()}
+      {/* de beurt-token schuift naar wie aan de beurt is */}
+      {p.turn !== null && p.winner == null && (() => {
+        const [x, y] = V(rot(TOKEN_AT, p.turn));
+        return (
+          <g className="turn-token" style={{ transform: `translate(${x}px, ${y}px)` }} aria-hidden="true">
+            <circle r={25} className="tt-rim" />
+            <circle r={19} className="tt-face" />
+            <text y={1}>{p.lang === 'nl' ? 'beurt' : 'turn'}</text>
+          </g>
+        );
+      })()}
+
       <g className="rdr-engraving" transform="translate(0 -160)" aria-label="Rob De Rop Digital">
         <g transform="translate(-42 -20) scale(.84)" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
           <path d="M 44 6 H 22 A 12 12 0 0 0 22 30 H 44 M 27 30 L 8 54 M 44 6 H 68 A 24 24 0 0 1 68 54 H 44 M 44 6 V54" />
@@ -392,7 +438,7 @@ export default function Board(p: Props) {
 
       {p.turnLabel && (
         <g key={`turn${p.turn}`} className="turn-marker" role="status" aria-label={p.turnLabel} transform="translate(0 142)">
-          <rect x="-155" y="-18" width="310" height="36" rx="18" />
+          <rect x="-195" y="-18" width="390" height="36" rx="18" />
           <text x="0" y="1">{p.turnLabel}</text>
         </g>
       )}
@@ -432,13 +478,44 @@ export default function Board(p: Props) {
           if (f.kind === 'ripple') return <circle key={f.id} cx={f.x} cy={f.y} r={20} className="fx-ripple" style={{ ...st, ['--s' as string]: f.r ?? 1 }} />;
           if (f.kind === 'dust') return <circle key={f.id} cx={f.x} cy={f.y} r={16} className="fx-dust" style={st} />;
           if (f.kind === 'home') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><circle r={22} className="fx-home" stroke={COLOR_HEX[f.color]} style={st} /><circle r={22} className="fx-home late" stroke="#fff3c4" style={{ animationDelay: `${f.delay + 120}ms` }} /></g>;
-          if (f.kind === 'deal') return <g key={f.id} className="fx-deal" style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg`, ['--dur' as string]: `${f.dur}ms` }}><rect x={-24} y={-34} width={48} height={68} rx={6} className="card-back" /></g>;
-          if (f.kind === 'deck') return <g key={f.id} className="fx-deck" style={{ ['--dur' as string]: `${f.dur}ms` }}>{[0, 1, 2, 3].map((i) => <rect key={i} x={-28 + i * 1.5} y={-40 - i * 2.5} width={56} height={80} rx={7} className="card-back" />)}</g>;
+          if (f.kind === 'deal') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-deal" style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg`, ['--dur' as string]: `${f.dur}ms` }}><rect x={-24} y={-34} width={48} height={68} rx={6} className="card-back" /></g></g>;
+          if (f.kind === 'deck') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-deck" style={{ ['--dur' as string]: `${f.dur}ms` }}>{[0, 1, 2, 3].map((i) => <rect key={i} x={-28 + i * 1.5} y={-40 - i * 2.5} width={56} height={80} rx={7} className="card-back" />)}</g></g>;
+          if (f.kind === 'label') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-label" style={{ ['--dur' as string]: `${f.dur}ms` }}><rect x={-105} y={-21} width={210} height={42} rx={21} stroke={COLOR_HEX[f.color]} /><text x={0} y={1}>{f.text}</text></g></g>;
           if (f.kind === 'spark') return <path key={f.id} d={`M ${f.x} ${f.y - 7} L ${f.x + 2} ${f.y - 2} L ${f.x + 7} ${f.y} L ${f.x + 2} ${f.y + 2} L ${f.x} ${f.y + 7} L ${f.x - 2} ${f.y + 2} L ${f.x - 7} ${f.y} L ${f.x - 2} ${f.y - 2} Z`} className="fx-spark" style={st} />;
           if (f.kind === 'splinter') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><rect x={-2} y={-7} width={4} height={13} rx={2} className="fx-splinter" fill={COLOR_HEX[f.color]} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg` }} /></g>;
           return <circle key={f.id} cx={f.x} cy={f.y} r={9 * (f.r ?? 1)} className="fx-confetti" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
         })}
       </g>
     </svg>
+  );
+}
+
+/** Klein figuurtje in de stijl van Tokske: een knikker met een gezichtje in de kleur van de speler. */
+function SeatAvatar({ c, kind, x, y, active }: { c: Color; kind: SeatKind; x: number; y: number; active: boolean }) {
+  return (
+    <g transform={`translate(${x} ${y})`} className={`seat-avatar ${active ? 'active' : ''}`} aria-hidden="true">
+      <ellipse cx={0} cy={30} rx={20} ry={4} className="av-shadow" />
+      <g className="av-body">
+        {kind === 'robot' && <><line x1={0} y1={-26} x2={0} y2={-39} className="av-antenna" /><circle cy={-41} r={4.5} fill={COLOR_HEX[c]} stroke={COLOR_DARK[c]} strokeWidth={1.5} /></>}
+        {kind === 'ai' && <path d="M 17 -34 l 2.6 6 6 2.6 -6 2.6 -2.6 6 -2.6 -6 -6 -2.6 6 -2.6 z" className="av-spark" />}
+        <circle r={27} fill={`url(#m${c})`} stroke={COLOR_DARK[c]} strokeWidth={2} />
+        <ellipse cx={-10} cy={-15} rx={8} ry={5} fill="#fff" opacity={0.55} transform="rotate(-28 -10 -15)" />
+        {kind === 'robot' ? (
+          <g>
+            <rect x={-15} y={-8} width={11} height={10} rx={2.5} className="av-eye" />
+            <rect x={4} y={-8} width={11} height={10} rx={2.5} className="av-eye" />
+            <rect x={-11} y={-5} width={4} height={4} className="av-pupil" /><rect x={7} y={-5} width={4} height={4} className="av-pupil" />
+            <path d="M -9 12 h 18 M -5 9 v 6 M 0 9 v 6 M 5 9 v 6" className="av-line" />
+          </g>
+        ) : (
+          <g>
+            <ellipse cx={-9} cy={-4} rx={6} ry={7} className="av-eye" /><ellipse cx={9} cy={-4} rx={6} ry={7} className="av-eye" />
+            <circle cx={-8} cy={-3} r={3.2} className="av-pupil" /><circle cx={10} cy={-3} r={3.2} className="av-pupil" />
+            <path d="M -9 9 Q 0 17 9 9" className="av-line" />
+            {kind === 'ai' && <path d="M -17 -13 Q -9 -17 -2 -13 M 2 -13 Q 9 -17 17 -13" className="av-line thin" />}
+          </g>
+        )}
+      </g>
+    </g>
   );
 }

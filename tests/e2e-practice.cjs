@@ -34,15 +34,15 @@ const out = process.env.SHOTS || '/tmp/';
       await p.waitForTimeout(200);
     }
 
-    const playable = await p.$$('.hand .pcard:not(.dim)');
-    if (mode === 'training' && playable.length === 0) {
-      await p.click('text=Ik kan niet spelen');
-      await (await p.$('.hand .pcard')).click();
-      await p.click('text=Alles afgooien');
+    // vastgelopen: dan staat de knop "Alles afgooien" naast je kaarten
+    if (await p.$('.discard .discard-all')) {
+      if (stats.discards % 2 === 0) await p.click('.discard .discard-all');
+      else { const c = await p.$('.hand .pcard'); await c.click(); await p.waitForTimeout(80); await c.click(); } // 2x klikken = afgooien
       stats.discards++;
       await p.waitForTimeout(150);
       continue;
     }
+    const playable = await p.$$('.hand .pcard:not(.dim)');
     await playable[0].click();
     await p.waitForTimeout(150);
     let ok = false;

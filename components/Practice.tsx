@@ -109,11 +109,11 @@ export default function Practice({ mode }: { mode: Mode }) {
       flush();
       await Promise.all(inflight.current.splice(0));
       if (!ok) { if (sessionId.current === id) setRating({ state: 'none' }); return; }
-      const { data, error } = await sb().rpc('finish_practice', { p_id: id, p_winner: winner });
+      const { data, error } = await sb().rpc('finish_practice', { p_id: id, p_winner: winner, p_home: st.homeBy ?? null });
       if (sessionId.current !== id) return;
       const mine = Array.isArray(data) ? data.find((x: { seat: number }) => x.seat === 0) : null;
       if (error || !mine) { setRating({ state: 'none' }); return; }
-      setRating({ state: 'done', before: mine.before, after: mine.after, delta: mine.delta });
+      setRating({ state: 'done', before: mine.before, after: mine.after, delta: mine.delta, homeMe: mine.homeMe, homeMate: mine.homeMate, base: mine.base });
       setMyRating(mine.after);
     })();
   }, [st, mode, userId, flush]);

@@ -119,7 +119,7 @@ async function rateOnline(g: GameRow, st: State, version: number) {
   const id = `online:${g.id}:${version}`;
   const { error } = await db.from('matches').insert({ id, source: 'online', mode: g.mode, room_code: g.code, seats, moves: st.moveNo });
   if (error) { console.error('matches', error.message); return; }
-  const r = await db.rpc('apply_match_result', { p_match_id: id, p_winner: st.winner, p_moves: st.moveNo });
+  const r = await db.rpc('apply_match_result', { p_match_id: id, p_winner: st.winner, p_moves: st.moveNo, p_home: st.homeBy ?? null });
   if (r.error) console.error('apply_match_result', r.error.message);
 }
 
