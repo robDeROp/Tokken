@@ -33,11 +33,32 @@ Oefenen tegen de computer (`/oefenen`) werkt volledig in de browser, zonder serv
   `node --experimental-strip-types scripts/level-tournament.ts 3 2 400` (niveau A tegen B, toont het Elo-verschil).
   Pas daarna `BOT_RATING` in `lib/engine.ts` én de tabel `bot_ratings` aan.
 
+## AI-computers (Jules, Mia, Staf, Bompa Fons)
+
+Naast de 5 robots met vaste regels zijn er 4 AI's (niveau 6–9, `lib/ai.ts`). Ze schatten met een klein neuraal netwerk
+de winstkans van elke mogelijke zet en kiezen de beste. Het netwerk leerde dat door zelf te spelen:
+
+1. `scripts/ai-train/gen.ts` speelt duizenden spellen en bewaart per zet de stand + wie uiteindelijk won
+   (ronde 1: 18.000 spellen tussen de robots; ronde 2: 10.000 spellen met de AI zelf aan tafel).
+2. `scripts/ai-train/train.py` (numpy) traint het netwerk; `export.py` zet de gewichten in `lib/ai-weights.ts`.
+3. `scripts/ai-train/arena.ts` meet de sterkte (bv. `npm run ai-arena -- ai:0:1 L5 200`);
+   `human.ts` vergelijkt met echte zetten van spelers uit `move_log`.
+
+Persoonlijkheden: **Jules** maakt vaker kleine foutjes en gooit alles af zoals veel mensen; **Mia** maakt af en toe een
+klein foutje; **Staf** neemt altijd de beste zet; **Bompa Fons** denkt de beste zetten door in 12 mogelijke werelden
+(de kaarten die hij niet ziet, willekeurig verdeeld). Alle AI's gooien één per één af (pas de laatste kaart als
+"alles", voor het stokje) en slaan hun ploegmaat enkel als het duidelijk loont.
+
+Ratings van de computers starten op de gemeten waarden en schuiven daarna mee met spellen tegen mensen (K = 5 per bot-stoel).
+
+Opnieuw trainen: `gen.ts` (met het vorige netwerk als 4e argument voor zelf-spel) → `train.py` → `export.py` →
+`npm run sync-engine` → server opnieuw uitrollen.
+
 ## Spelregels aanpassen
 
 1. Pas `lib/engine.ts` aan.
 2. `npm test`
-3. `npm run sync-engine` (kopieert de engine naar de server-functie)
+3. `npm run sync-engine` (kopieert engine en AI naar de server-functie)
 4. Server opnieuw uitrollen: `npx supabase functions deploy game --project-ref qxafpwxnwcumljwzweyt --no-verify-jwt`
 
 ## Online zetten (Vercel)

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { sb } from '@/lib/supabase';
 import { useT } from '@/lib/i18n';
-import { BOT_LEVEL_NAME, asLevel } from '@/lib/engine';
+import { BOT_LEVEL_NAME, asLevel, isAiLevel } from '@/lib/engine';
 
 type Row = { user_id: string | null; name: string | null; avatar_url: string | null; rating: number; games: number | null; wins: number | null; bot_level: number | null };
 
@@ -38,9 +38,9 @@ export default function Leaderboard({ userId }: { userId: string | null }) {
                 const l = asLevel(r.bot_level);
                 return (
                   <li key={`bot-${l}`} className="lb-bot">
-                    <span className="score-rank">🤖</span>
+                    <span className="score-rank">{isAiLevel(l) ? '🧠' : '🤖'}</span>
                     <strong>{BOT_LEVEL_NAME[l][lang]}</strong>
-                    <span><b>{r.rating}</b> <small className="muted">{t.bot}</small></span>
+                    <span><b>{r.rating}</b> <small className="muted">{isAiLevel(l) ? 'AI' : t.bot}</small></span>
                   </li>
                 );
               }

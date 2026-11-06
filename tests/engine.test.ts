@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {
   newGame, applyAction, botAction, movesForRank, sevenNext, applySevenSteps, forwardTargets, START, ENTRY, TRACK,
   type State, type Piece, type Color, type Pos, RuleError, handHasMove, needsFreeExit, teamDone,
-  botActionLevel, asLevel, BOT_LEVELS, BOT_RATING, type BotLevel,
+  botActionLevel, asLevel, BOT_LEVELS, ROBOT_LEVELS, AI_LEVELS, BOT_RATING, type BotLevel,
 } from '../lib/engine.ts';
 
 let passed = 0;
@@ -339,9 +339,11 @@ test('niveaus: gemengde tafels (elke stoel een ander niveau) spelen altijd uit',
 });
 
 test('niveaus: ratings stijgen met het niveau, onbekend niveau = Gemiddeld', () => {
-  for (let i = 1; i < BOT_LEVELS.length; i++) assert.ok(BOT_RATING[BOT_LEVELS[i]] > BOT_RATING[BOT_LEVELS[i - 1]]);
+  for (const group of [ROBOT_LEVELS, AI_LEVELS]) for (let i = 1; i < group.length; i++) assert.ok(BOT_RATING[group[i]] > BOT_RATING[group[i - 1]]);
+  assert.equal(BOT_LEVELS.length, 9);
   assert.equal(asLevel(undefined), 3);
-  assert.equal(asLevel('9'), 3);
+  assert.equal(asLevel('10'), 3);
+  assert.equal(asLevel('9'), 9);
   assert.equal(asLevel('1'), 1);
 });
 

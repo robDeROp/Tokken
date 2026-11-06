@@ -1,5 +1,7 @@
 'use client';
+import { useEffect, useState } from 'react';
 import { sb } from './supabase';
+import { BOT_RATING, type BotLevel } from './engine';
 
 export type RatingInfo =
   | { state: 'loading' }
@@ -25,4 +27,35 @@ export async function waitForOnlineRating(gameId: string, userId: string, since:
     await new Promise((r) => setTimeout(r, 1500));
   }
   return { state: 'none' };
+}
+
+// ---------- ratings van de computers (schuiven mee met spellen tegen mensen) ----------
+
+let cache: Record<number, number> | null = null;
+let loading: Promise<Record<number, number>> | null = null;
+const listeners = new Set<(r: Record<number, number>) => void>();
+
+function loadBotRatings(): Promise<Record<number, number>> {
+  if (cache) return Promise.resolve(cache);
+  if (!loading) {
+    loading = Promise.resolve(sb().from('bot_ratings').select('level, rating')).then(({ data }) => {
+      const r: Record<number, number> = { ...BOT_RATING };
+      for (const row of (data ?? []) as { level: number; rating: number }[]) r[row.level] = row.rating;
+      cache = r;
+      listeners.forEach((l) => l(r));
+      return r;
+    }).catch(() => ({ ...BOT_RATING }));
+  }
+  return loading;
+}
+
+/** Actuele rating per bot-niveau (eerst de vaste startwaarden, dan die uit de database). */
+export function useBotRatings(): Record<BotLevel, number> {
+  const [r, setR] = useState<Record<number, number>>(cache ?? BOT_RATING);
+  useEffect(() => {
+    listeners.add(setR);
+    void loadBotRatings().then(setR);
+    return () => { listeners.delete(setR); };
+  }, []);
+  return r as Record<BotLevel, number>;
 }

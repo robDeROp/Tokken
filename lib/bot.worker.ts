@@ -1,7 +1,8 @@
-import { botActionLevel, asLevel, type State } from './engine';
+import { botMove } from './ai';
+import type { State } from './engine';
 self.onmessage = (event: MessageEvent<{ state: State; level: number }>) => {
   try {
     const { state, level } = event.data;
-    self.postMessage({ action: botActionLevel(state, state.turn, asLevel(level)) });
+    self.postMessage({ action: botMove(state, state.turn, level) });
   } catch { self.postMessage({ error: true }); }
 };

@@ -2,9 +2,10 @@
 // of andermans kaarten kan zien. De regels zelf staan in engine.ts (gedeeld met de website).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
-  newGame, applyAction, botActionLevel, asLevel, publicView, RuleError,
+  newGame, applyAction, asLevel, botSeatName, publicView, RuleError,
   type Action, type Color, type Mode, type State,
 } from './engine.ts';
+import { botMove } from './ai.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -229,10 +230,13 @@ Deno.serve(async (req) => {
           g.seats = g.seats.map((x) => (x && x.playerId === pid ? null : x));
         } else if (op === 'addBot') {
           if (!validSeat || g.seats[seat]) throw new HttpError(400, 'bad_seat');
-          g.seats[seat] = { playerId: null, name: BOT_NAMES[seat], bot: true, level: asLevel(body.level) };
+          const level = asLevel(body.level);
+          g.seats[seat] = { playerId: null, name: botSeatName(BOT_NAMES[seat], level, g.seats.map((x) => x?.name)), bot: true, level };
         } else if (op === 'setBotLevel') {
           if (!validSeat || !g.seats[seat]?.bot) throw new HttpError(400, 'bad_seat');
-          g.seats[seat] = { ...g.seats[seat]!, level: asLevel(body.level) };
+          const level = asLevel(body.level);
+          const others = g.seats.map((x, i) => (i === seat ? null : x?.name));
+          g.seats[seat] = { ...g.seats[seat]!, level, name: botSeatName(BOT_NAMES[seat], level, others) };
         } else if (op === 'removeBot') {
           if (!validSeat || !g.seats[seat]?.bot) throw new HttpError(400, 'bad_seat');
           g.seats[seat] = null;
@@ -272,7 +276,7 @@ Deno.serve(async (req) => {
           seat = st.turn;
           // al gespeeld door iemand anders? (meerdere browsers kunnen tegelijk vragen)
           if (Number(body.version) !== g.version || !g.seats[seat]?.bot || st.winner !== null) return NOOP;
-          action = botActionLevel(st, seat, asLevel(g.seats[seat]?.level), rng);
+          action = botMove(st, seat, asLevel(g.seats[seat]?.level), rng);
         }
         const before = snapshotForLog(st);
         const actor = op === 'act' ? who(s, body.token) : null;

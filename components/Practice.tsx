@@ -2,14 +2,14 @@
 // Oefenen: jij (geel) tegen/met 3 computers, volledig in je browser, zonder server.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { newGame, applyAction, publicView, RuleError, BOT_RATING, asLevel, type State, type Mode, type Action, type Color } from '@/lib/engine';
+import { newGame, applyAction, publicView, RuleError, asLevel, botSeatName, type State, type Mode, type Action, type Color } from '@/lib/engine';
 import { useT } from '@/lib/i18n';
 import { getName, sb } from '@/lib/supabase';
 import { Game, Shell, type GameRow } from './Room';
 import LevelPicker from './LevelPicker';
 import { moveDuration, dealDuration } from '@/lib/board';
 import { getSpeed, getPracticeLevels, setPracticeLevels } from '@/lib/prefs';
-import { currentUserId, expected, type RatingInfo } from '@/lib/rating';
+import { currentUserId, expected, useBotRatings, type RatingInfo } from '@/lib/rating';
 
 const clone = (s: State): State => structuredClone(s);
 
@@ -19,6 +19,12 @@ type Levels = [number, number, number];
 function logState(st: State) { const { log: _log, ...rest } = st; return structuredClone(rest); }
 
 const BOTS = ['Robot Rik', 'Robot Roos', 'Robot Bert'];
+/** Namen aan tafel voor stoel 1, 2, 3 (AI's krijgen hun eigen naam). */
+function botNames(lv: number[]): string[] {
+  const out: string[] = [];
+  lv.forEach((l, i) => out.push(botSeatName(BOTS[i], l, out)));
+  return out;
+}
 
 export default function Practice({ mode }: { mode: Mode }) {
   const { t } = useT();
@@ -30,6 +36,7 @@ export default function Practice({ mode }: { mode: Mode }) {
   const [rating, setRating] = useState<RatingInfo | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const botRatings = useBotRatings();
   const levelsRef = useRef<Levels>([2, 3, 2]);
   const matchReady = useRef<Promise<boolean>>(Promise.resolve(false));
   const sessionId = useRef<string | null>(null);
@@ -129,7 +136,7 @@ export default function Practice({ mode }: { mode: Mode }) {
           if (!cur || cur.turn !== turn || cur.moveNo !== moveNo || cur.winner !== null) return cur;
           const n = clone(cur);
           applyAction(n, turn, event.data.action);
-          record(cur, n, turn, event.data.action, true, BOTS[turn - 1] ?? 'Robot');
+          record(cur, n, turn, event.data.action, true, botNames(levelsRef.current)[turn - 1] ?? 'Robot');
           return n;
         });
       }, wait);
@@ -165,11 +172,11 @@ export default function Practice({ mode }: { mode: Mode }) {
 
   if (!started || !st) {
     if (!levels) return null;
-    const names = [BOTS[0], BOTS[1], BOTS[2]];
+    const names = botNames(levels);
     const roles = [t.opponentLeft, t.teammate, t.opponentRight];
     const me = myRating ?? 1000;
-    const ours = (me + BOT_RATING[asLevel(levels[1])]) / 2;
-    const theirs = (BOT_RATING[asLevel(levels[0])] + BOT_RATING[asLevel(levels[2])]) / 2;
+    const ours = (me + botRatings[asLevel(levels[1])]) / 2;
+    const theirs = (botRatings[asLevel(levels[0])] + botRatings[asLevel(levels[2])]) / 2;
     const chance = Math.round(expected(ours, theirs) * 100);
     // tonen in tafelvolgorde: ploegmaat eerst, dan de tegenstanders
     const order = [1, 0, 2];
@@ -188,6 +195,7 @@ export default function Practice({ mode }: { mode: Mode }) {
               </label>
             ))}
           </div>
+          <p className="muted small">{t.aiHelp}</p>
           <p className="small">
             {userId ? <>{t.yourRating}: <strong>{me}</strong> · </> : null}
             {t.winChance}: <strong>{chance}%</strong>
@@ -204,7 +212,7 @@ export default function Practice({ mode }: { mode: Mode }) {
     players: [{ id: 'me', name: myName || t.you }],
     seats: [
       { playerId: 'me', name: myName || t.youCap, bot: false },
-      ...BOTS.map((name, i) => ({ playerId: null, name, bot: true, level: lv[i] })),
+      ...botNames(lv).map((name, i) => ({ playerId: null, name, bot: true, level: lv[i] })),
     ],
     state: publicView(st), version: st.moveNo,
   };
