@@ -45,11 +45,11 @@ interface Props {
 }
 export type SeatKind = 'human' | 'robot' | 'ai';
 
-// Plaatsen in de vrije hoek rechts van elk huisje (in de draaiing van die stoel)
-const AVATAR_AT: XY = [205, 452];
-const TOKEN_AT: XY = [290, 452];
-const DEALER_AT: XY = [362, 450];
-const DECK_AT: XY = [215, 320];
+// Plaatsen in de vrije ruimte net boven het eigen kot (in de draaiing van die stoel)
+const AVATAR_AT: XY = [-335, 350];
+const TOKEN_AT: XY = [-422, 352];
+const DEALER_AT: XY = [-335, 268];
+const DECK_AT: XY = DEALER_AT; // de deler schudt op zijn eigen plek
 
 type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
 let fxId = 0;
@@ -114,7 +114,7 @@ export default function Board(p: Props) {
     const total = SHUFFLE_MS + DEAL_CARDS * gap + fly;
     const items: Omit<Fx, 'id'>[] = [{ kind: 'deck', x: dx0, y: dy0, color: d.dealer, delay: 0, dur: total }];
     const who = p.names[d.dealer];
-    if (who) items.push({ kind: 'label', x: dx0, y: dy0 - 66, color: d.dealer, delay: 0, dur: total, text: p.lang === 'nl' ? `${who} deelt` : `${who} deals` });
+    if (who) items.push({ kind: 'label', x: 0, y: 60, color: d.dealer, delay: 0, dur: total, text: p.lang === 'nl' ? `${who} deelt` : `${who} deals` });
     for (let k = 0; k < DEAL_CARDS; k++) {
       const c = ((d.dealer + 1 + (k % 4)) % 4) as Color;
       const [tx, ty] = V(rot([-235 + (Math.floor(k / 4) - 3) * 9, 392], c));
