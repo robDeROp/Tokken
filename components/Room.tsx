@@ -593,10 +593,10 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
               <button className="btn small" onClick={() => setSeven(seven.slice(0, -1))}>{t.undo}</button>
             )}
           </div>
-          <div className={`hand ${dealRound === pub.round ? 'dealing' : ''}`} key={`hand-${dealRound ?? 0}`} style={dealVars}>
+          <div className={`hand ${dealRound === pub.round ? 'dealing' : ''} ${!myTurn && pub.winner === null ? 'waiting' : ''}`} key={`hand-${dealRound ?? 0}`} style={dealVars}>
             {hand.map((c) => (
               <CardFace key={c.id} card={c} lang={lang} selected={selCard === c.id} laid={false}
-                dim={mode === 'training' && myTurn && !stuck && !playable.has(c.id)} onClick={() => pickCard(c)}
+                dim={(!myTurn && pub.winner === null) || (mode === 'training' && myTurn && !stuck && !playable.has(c.id))} onClick={() => pickCard(c)}
                 discard={stuck && selCard === c.id} discardLabel={t.discardTag} />
             ))}
             {hand.length === 0 && <span className="muted">—</span>}

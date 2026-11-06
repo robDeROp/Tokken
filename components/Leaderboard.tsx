@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { sb } from '@/lib/supabase';
 import { useT } from '@/lib/i18n';
 import { BOT_LEVEL_NAME, asLevel, isAiLevel } from '@/lib/engine';
+import PlayerCard from './PlayerCard';
 
 type Row = { user_id: string | null; name: string | null; avatar_url: string | null; rating: number; games: number | null; wins: number | null; bot_level: number | null };
 
@@ -11,6 +12,7 @@ export default function Leaderboard({ userId }: { userId: string | null }) {
   const { t, lang } = useT();
   const [rows, setRows] = useState<Row[] | null>(null);
   const [err, setErr] = useState(false);
+  const [open, setOpen] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     const load = () => sb().rpc('leaderboard').then(({ data, error }) => {
@@ -30,7 +32,7 @@ export default function Leaderboard({ userId }: { userId: string | null }) {
       <p className="muted small">{t.leaderboardHelp}</p>
       {err ? <p className="muted small">{lang === 'nl' ? 'De ranglijst is nog niet bereikbaar.' : 'The leaderboard is not available yet.'}</p>
         : !rows ? <p>{lang === 'nl' ? 'Laden…' : 'Loading…'}</p> : <>
-          {me && <p className="small">{t.yourRating}: <strong>{me.rating}</strong> · {me.games} {t.games}</p>}
+          {me && <p className="small">{t.yourRating}: <strong>{me.rating}</strong> · {me.games} {t.games} · <button className="linkish" onClick={() => setOpen(me.user_id)}>{lang === 'nl' ? 'jouw statistieken' : 'your stats'}</button></p>}
           {!humans.length && <p className="muted small">{t.leaderboardEmpty}</p>}
           <ol>
             {rows.map((r) => {
@@ -46,15 +48,19 @@ export default function Leaderboard({ userId }: { userId: string | null }) {
               }
               rank++;
               return (
-                <li key={r.user_id} className={r.user_id === userId ? 'lb-me' : ''}>
-                  <span className="score-rank">{rank}</span>
-                  <strong>{r.name}</strong>
-                  <span><b>{r.rating}</b> <small className="muted">{r.wins}/{r.games} {lang === 'nl' ? 'gewonnen' : 'won'}</small></span>
+                <li key={r.user_id} className={`lb-human ${r.user_id === userId ? 'lb-me' : ''}`}>
+                  <button className="lb-open" onClick={() => r.user_id && setOpen(r.user_id)} title={lang === 'nl' ? 'Statistieken bekijken' : 'View stats'}>
+                    <span className="score-rank">{rank}</span>
+                    <strong>{r.name}</strong>
+                    <span><b>{r.rating}</b> <small className="muted">{r.wins}/{r.games} {lang === 'nl' ? 'gewonnen' : 'won'}</small></span>
+                    <span className="lb-chev" aria-hidden="true">›</span>
+                  </button>
                 </li>
               );
             })}
           </ol>
         </>}
+      {open && <PlayerCard userId={open} onClose={() => setOpen(null)} />}
     </section>
   );
 }

@@ -2,7 +2,7 @@
 // of andermans kaarten kan zien. De regels zelf staan in engine.ts (gedeeld met de website).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
-  newGame, applyAction, asLevel, botSeatName, publicView, RuleError,
+  newGame, applyAction, asLevel, botSeatName, publicView, RuleError, lanesPerColor,
   type Action, type Color, type Mode, type State,
 } from './engine.ts';
 import { botMove } from './ai.ts';
@@ -119,7 +119,10 @@ async function rateOnline(g: GameRow, st: State, version: number) {
   const id = `online:${g.id}:${version}`;
   const { error } = await db.from('matches').insert({ id, source: 'online', mode: g.mode, room_code: g.code, seats, moves: st.moveNo });
   if (error) { console.error('matches', error.message); return; }
-  const r = await db.rpc('apply_match_result', { p_match_id: id, p_winner: st.winner, p_moves: st.moveNo, p_home: st.homeBy ?? null });
+  const r = await db.rpc('apply_match_result', {
+    p_match_id: id, p_winner: st.winner, p_moves: st.moveNo, p_home: st.homeBy ?? null,
+    p_rounds: st.round, p_lanes: lanesPerColor(st.pieces), p_started: st.startedAt ? new Date(st.startedAt).toISOString() : null,
+  });
   if (r.error) console.error('apply_match_result', r.error.message);
 }
 

@@ -64,6 +64,8 @@ export interface State {
   playedThisRound: boolean[];
   /** Hoeveel pionnen van de eigen ploeg elke speler zelf zijn huisje in speelde (voor de rating). */
   homeBy?: number[];
+  /** Begin van het spel (ms sinds 1970), voor de speelduur in de statistieken. */
+  startedAt?: number;
   moveNo: number;
   last: LastMove | null;
   log: LogEntry[];
@@ -138,6 +140,7 @@ export function newGame(mode: Mode, rng: () => number = Math.random): State {
     mode,
     playedThisRound: [false, false, false, false],
     homeBy: [0, 0, 0, 0],
+    startedAt: Date.now(),
     moveNo: 0,
     last: null,
     log: [],
@@ -428,6 +431,11 @@ export function matchMove(P: Piece[], c: Color, rank: Rank, move: Move): { trace
     return { traces: [{ piece: a.id, from: pa, to: pb }, { piece: b.id, from: pb, to: pa }], kills, swap: [a.id, b.id], P: Q };
   }
   return null;
+}
+
+/** Aantal knikkers in het huisje per kleur. */
+export function lanesPerColor(P: Piece[]): number[] {
+  return COLORS.map((c) => P.filter((p) => p.color === c && p.pos.t === 'lane').length);
 }
 
 export function teamDone(P: Piece[], t: Team): boolean {

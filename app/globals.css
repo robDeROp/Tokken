@@ -752,3 +752,55 @@ body {
   .board .seat-avatar.active .av-body, .board .turn-token { animation: none; }
   .board .dealer-chip { transition: none; }
 }
+
+/* niet jouw beurt: kaarten grijs en ze springen niet op */
+.hand.waiting .pcard { filter: grayscale(.6); cursor: default; }
+.hand.waiting .pcard:hover { transform: none; }
+
+/* ---------- ranglijst: klikbaar ---------- */
+.leaderboard li.lb-human { padding: 0; }
+.leaderboard .lb-open { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.leaderboard .lb-open:hover, .leaderboard .lb-open:focus-visible { background: #f3e3c3; }
+.leaderboard .lb-open strong { flex: 1; }
+.leaderboard .lb-chev { color: #9a7a57; font-size: 1.3rem; line-height: 1; }
+
+/* ---------- spelerkaart ---------- */
+.player-card { width: min(860px, 96vw); max-height: 90vh; overflow-y: auto; position: relative; text-align: left; }
+.player-card .pc-close { position: absolute; top: 10px; right: 10px; }
+.pc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; padding-right: 36px; }
+.pc-head h2 { margin: 0; }
+.pc-head p { margin: 2px 0 0; }
+.pc-avatar { width: 54px; height: 54px; border-radius: 50%; object-fit: cover; border: 3px solid #826141; flex: none; }
+.pc-initial { display: grid; place-items: center; background: var(--yellow); font: 800 1.5rem var(--font-ui); }
+.pc-rating { margin-left: auto; display: grid; justify-items: center; background: #f8e8c9; border: 1px solid #9a7047; border-radius: 12px; padding: 6px 14px; }
+.pc-rating strong { font-size: 1.8rem; line-height: 1; color: #4c3522; }
+.pc-rating span { font-size: .75rem; color: #735d48; }
+.pc-stats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 8px 0 10px; }
+.pc-stats > div { display: grid; justify-items: center; text-align: center; background: #fbf8f2; border: 1px solid #e2d4bd; border-radius: 10px; padding: 8px 4px; }
+.pc-stats strong { font-size: 1.25rem; color: #4c3522; }
+.pc-stats span { font-size: .72rem; color: #735d48; line-height: 1.2; }
+.pc-spark { width: 100%; height: 70px; margin: 4px 0 6px; }
+.pc-spark polyline { stroke: #b07a2a; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.pc-spark circle { fill: #f5cf2e; stroke: #9c7d00; stroke-width: 2; }
+.player-card h3 { margin: 10px 0 6px; }
+.pc-table-wrap { overflow-x: auto; }
+.pc-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.pc-table th { text-align: left; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #735d48; padding: 6px; border-bottom: 2px solid #e2d4bd; }
+.pc-table td { padding: 7px 6px; border-bottom: 1px solid #eee2cf; vertical-align: top; }
+.pc-table tr.won td:first-child { box-shadow: inset 4px 0 0 var(--green); }
+.pc-table tr.lost td:first-child { box-shadow: inset 4px 0 0 var(--red); }
+.pc-date { font-weight: 700; }
+.pc-players { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px 10px; min-width: 260px; }
+.pc-player { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.pc-player .dot { width: 12px; height: 12px; flex: none; }
+.pc-player .pc-pname { overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+.pc-player b { margin-left: auto; min-width: 1.4em; text-align: center; background: #efe3cd; border-radius: 6px; }
+.pc-player.win-team b { background: #d6f0df; color: var(--green); }
+.pc-player.me .pc-pname { font-weight: 800; text-decoration: underline; text-decoration-color: var(--c); text-decoration-thickness: 3px; }
+.pc-result { display: inline-block; font-weight: 700; margin-right: 6px; }
+.pc-result.w { color: var(--green); }
+.pc-result.l { color: var(--red); }
+.pc-delta { font-weight: 800; padding: 1px 6px; border-radius: 999px; }
+.pc-delta.up { background: #d6f0df; color: var(--green); }
+.pc-delta.down { background: #f7d9d6; color: var(--red); }
+@media (max-width: 700px) { .pc-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

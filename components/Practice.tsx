@@ -2,7 +2,7 @@
 // Oefenen: jij (geel) tegen/met 3 computers, volledig in je browser, zonder server.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { newGame, applyAction, publicView, RuleError, asLevel, botSeatName, type State, type Mode, type Action, type Color } from '@/lib/engine';
+import { newGame, applyAction, publicView, RuleError, asLevel, botSeatName, lanesPerColor, type State, type Mode, type Action, type Color } from '@/lib/engine';
 import { useT } from '@/lib/i18n';
 import { getName, sb } from '@/lib/supabase';
 import { Game, Shell, type GameRow } from './Room';
@@ -109,7 +109,7 @@ export default function Practice({ mode }: { mode: Mode }) {
       flush();
       await Promise.all(inflight.current.splice(0));
       if (!ok) { if (sessionId.current === id) setRating({ state: 'none' }); return; }
-      const { data, error } = await sb().rpc('finish_practice', { p_id: id, p_winner: winner, p_home: st.homeBy ?? null });
+      const { data, error } = await sb().rpc('finish_practice', { p_id: id, p_winner: winner, p_home: st.homeBy ?? null, p_rounds: st.round, p_lanes: lanesPerColor(st.pieces) });
       if (sessionId.current !== id) return;
       const mine = Array.isArray(data) ? data.find((x: { seat: number }) => x.seat === 0) : null;
       if (error || !mine) { setRating({ state: 'none' }); return; }
