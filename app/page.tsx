@@ -6,6 +6,7 @@ import type { User } from '@supabase/supabase-js';
 import { sb, api, setToken, getName, setName } from '@/lib/supabase';
 import { useT, LangToggle } from '@/lib/i18n';
 import Scoreboard from '@/components/Scoreboard';
+import Leaderboard from '@/components/Leaderboard';
 import { BrandTag, MadeBy } from '@/components/Brand';
 import { COLOR_HEX } from '@/components/Board';
 import { TokskeHero } from '@/components/Tokske';
@@ -131,6 +132,8 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      <Leaderboard userId={user?.id ?? null} />
 
       <Scoreboard />
 

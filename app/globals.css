@@ -691,3 +691,25 @@ body {
 .hand.dealing > .pcard:nth-child(6) { animation-delay: calc(var(--shuffle) + (var(--off) + 20) * var(--gap) + var(--fly)); }
 .hand.dealing > .pcard:nth-child(7) { animation-delay: calc(var(--shuffle) + (var(--off) + 24) * var(--gap) + var(--fly)); }
 @media (prefers-reduced-motion: reduce) { .hand.dealing > .pcard { animation: none; } }
+
+/* ---------- niveaus en rating ---------- */
+.level-picker { font: inherit; font-size: .85rem; padding: 5px 8px; border: 1px solid #a87743; border-radius: 6px; background: #fcfaf5; color: var(--ink); }
+.level-tag { background: #806043; color: #fff; }
+.practice-setup { margin-top: 24px; display: grid; gap: 12px; }
+.practice-setup h1 { margin: 0; }
+.setup-rows { display: grid; gap: 8px; }
+.setup-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: 10px; border: 1px solid #d1c4af; background: #fbf8f2; }
+.setup-row > span { display: grid; }
+.setup-row.mate { border-left: 6px solid var(--orange); }
+.setup-row.opp { border-left: 6px solid var(--blue); }
+.rating-result { font-size: 1.05rem; display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap; }
+.rating-delta { font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.rating-result.up .rating-delta { background: #d6f0df; color: var(--green); }
+.rating-result.down .rating-delta { background: #f7d9d6; color: var(--red); }
+.leaderboard { margin-top: 20px; }
+.leaderboard ol { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.leaderboard li { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: 8px; background: #fbf8f299; }
+.leaderboard li strong { flex: 1; }
+.leaderboard li b { font-size: 1.05rem; }
+.leaderboard li.lb-bot { background: transparent; border: 1px dashed #c9b391; color: #5f5040; padding: 5px 10px; }
+.leaderboard li.lb-me { outline: 2px solid var(--yellow); }

@@ -36,3 +36,16 @@ export function setMascot(on: boolean) {
   mListeners.forEach((l) => l(on));
 }
 export function onMascotChange(l: (on: boolean) => void) { mListeners.add(l); return () => { mListeners.delete(l); }; }
+
+// Niveaus van de computers bij oefenen: [stoel 1 (links), stoel 2 (ploegmaat), stoel 3 (rechts)]
+const LKEY = 'tokken-practice-levels';
+export function getPracticeLevels(): [number, number, number] {
+  try {
+    const v = JSON.parse(localStorage.getItem(LKEY) ?? 'null');
+    if (Array.isArray(v) && v.length === 3 && v.every((x) => Number.isInteger(x) && x >= 1 && x <= 5)) return v as [number, number, number];
+  } catch { /* leeg of kapot */ }
+  return [2, 3, 2];
+}
+export function setPracticeLevels(l: [number, number, number]) {
+  try { localStorage.setItem(LKEY, JSON.stringify(l)); } catch { /* privévenster */ }
+}

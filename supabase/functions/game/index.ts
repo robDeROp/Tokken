@@ -2,7 +2,7 @@
 // of andermans kaarten kan zien. De regels zelf staan in engine.ts (gedeeld met de website).
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
-  newGame, applyAction, botAction, publicView, RuleError,
+  newGame, applyAction, botActionLevel, asLevel, publicView, RuleError,
   type Action, type Color, type Mode, type State,
 } from './engine.ts';
 
@@ -16,7 +16,7 @@ const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SE
   auth: { persistSession: false },
 });
 
-type Seat = { playerId: string | null; name: string; bot: boolean } | null;
+type Seat = { playerId: string | null; name: string; bot: boolean; level?: number } | null;
 type Player = { id: string; name: string };
 interface GameRow {
   id: string; code: string; status: string; mode: Mode; host_player: string;
@@ -96,6 +96,32 @@ function seatOf(g: GameRow, pid: string): Color | null {
   return i < 0 ? null : (i as Color);
 }
 
+/** Koppel een speler in de kamer aan zijn Google-account (voor de rating). */
+async function linkUser(gameId: string, playerId: string, userId: string | undefined) {
+  if (!userId) return;
+  const { error } = await db.from('room_players').upsert({ game_id: gameId, player_id: playerId, user_id: userId });
+  if (error) console.error('room_players', error.message);
+}
+
+/** Uitgespeeld online spel: partij bewaren en ratings aanpassen. */
+async function rateOnline(g: GameRow, st: State, version: number) {
+  if (st.winner === null) return;
+  const { data: rp } = await db.from('room_players').select('player_id, user_id').eq('game_id', g.id);
+  const uidOf = new Map<string, string>((rp ?? []).map((r: { player_id: string; user_id: string }) => [r.player_id, r.user_id]));
+  const seats = g.seats.map((x) => x?.bot
+    ? { name: x.name, bot: true, level: asLevel(x.level) }
+    : { name: x?.name ?? 'Speler', bot: false, user_id: x?.playerId ? uidOf.get(x.playerId) ?? null : null });
+  // hetzelfde account op twee stoelen (twee tabbladen): telt niet mee
+  const count = new Map<string, number>();
+  for (const x of seats) if ('user_id' in x && x.user_id) count.set(x.user_id, (count.get(x.user_id) ?? 0) + 1);
+  for (const x of seats) if ('user_id' in x && x.user_id && count.get(x.user_id)! > 1) x.user_id = null;
+  const id = `online:${g.id}:${version}`;
+  const { error } = await db.from('matches').insert({ id, source: 'online', mode: g.mode, room_code: g.code, seats, moves: st.moveNo });
+  if (error) { console.error('matches', error.message); return; }
+  const r = await db.rpc('apply_match_result', { p_match_id: id, p_winner: st.winner, p_moves: st.moveNo });
+  if (r.error) console.error('apply_match_result', r.error.message);
+}
+
 async function userFromAuth(req: Request) {
   const h = req.headers.get('Authorization') ?? '';
   const token = h.replace(/^Bearer\s+/i, '');
@@ -130,6 +156,7 @@ Deno.serve(async (req) => {
       }).select('id').single();
       if (error) throw error;
       await db.from('game_secrets').insert({ game_id: g.id, tokens: { [token]: playerId }, host_user: user?.id ?? null });
+      await linkUser(g.id, playerId, user?.id);
       return json({ code: newCode, token, playerId });
     }
 
@@ -137,11 +164,15 @@ Deno.serve(async (req) => {
       const name = cleanName(body.name);
       const playerId = rid(10);
       const token = rid(32);
-      const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
+      let gameId = '';
+      await mutate(code, String(body.token ?? ''), (g, s) => {
         if (g.players.length >= 12) throw new HttpError(400, 'room_full');
         g.players.push({ id: playerId, name });
         s.tokens[token] = playerId;
+        gameId = g.id;
       });
+      const user = await userFromAuth(req);
+      await linkUser(gameId, playerId, user?.id);
       return json({ code, token, playerId });
     }
 
@@ -176,7 +207,7 @@ Deno.serve(async (req) => {
       return json(snapshot === NOOP ? { ok: true } : snapshot);
     }
 
-    if (op === 'sit' || op === 'stand' || op === 'addBot' || op === 'removeBot' || op === 'setMode' || op === 'start' || op === 'rematch') {
+    if (op === 'sit' || op === 'stand' || op === 'addBot' || op === 'removeBot' || op === 'setBotLevel' || op === 'setMode' || op === 'start' || op === 'rematch') {
       const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         const pid = who(s, body.token);
         const isHost = pid === g.host_player;
@@ -198,7 +229,10 @@ Deno.serve(async (req) => {
           g.seats = g.seats.map((x) => (x && x.playerId === pid ? null : x));
         } else if (op === 'addBot') {
           if (!validSeat || g.seats[seat]) throw new HttpError(400, 'bad_seat');
-          g.seats[seat] = { playerId: null, name: BOT_NAMES[seat], bot: true };
+          g.seats[seat] = { playerId: null, name: BOT_NAMES[seat], bot: true, level: asLevel(body.level) };
+        } else if (op === 'setBotLevel') {
+          if (!validSeat || !g.seats[seat]?.bot) throw new HttpError(400, 'bad_seat');
+          g.seats[seat] = { ...g.seats[seat]!, level: asLevel(body.level) };
         } else if (op === 'removeBot') {
           if (!validSeat || !g.seats[seat]?.bot) throw new HttpError(400, 'bad_seat');
           g.seats[seat] = null;
@@ -220,6 +254,7 @@ Deno.serve(async (req) => {
 
     if (op === 'act' || op === 'botStep') {
       let logRow: Record<string, unknown> | null = null;
+      let finished: { g: GameRow; st: State; version: number } | null = null;
       const snapshot = await mutate(code, String(body.token ?? ''), (g, s) => {
         if (g.status !== 'playing' || !s.full_state) throw new HttpError(400, 'not_playing');
         const st = s.full_state;
@@ -237,7 +272,7 @@ Deno.serve(async (req) => {
           seat = st.turn;
           // al gespeeld door iemand anders? (meerdere browsers kunnen tegelijk vragen)
           if (Number(body.version) !== g.version || !g.seats[seat]?.bot || st.winner !== null) return NOOP;
-          action = botAction(st, seat, rng);
+          action = botActionLevel(st, seat, asLevel(g.seats[seat]?.level), rng);
         }
         const before = snapshotForLog(st);
         const actor = op === 'act' ? who(s, body.token) : null;
@@ -248,10 +283,11 @@ Deno.serve(async (req) => {
           throw e;
         }
         g.state = publicView(st);
-        if (st.winner !== null) g.status = 'finished';
+        if (st.winner !== null) { g.status = 'finished'; finished = { g, st, version: g.version + 1 }; } else finished = null;
         logRow = {
           game_id: g.id, source: 'online', mode: st.mode, move_no: before.moveNo, round: before.round, seat,
-          is_bot: !!g.seats[seat]?.bot, player_id: actor, player_name: g.seats[seat]?.name ?? null,
+          is_bot: !!g.seats[seat]?.bot, bot_level: g.seats[seat]?.bot ? asLevel(g.seats[seat]?.level) : null,
+          player_id: actor, player_name: g.seats[seat]?.name ?? null,
           action, result: st.last, state_before: before,
         };
       });
@@ -261,6 +297,11 @@ Deno.serve(async (req) => {
         // op de achtergrond, zodat de zet niet trager wordt
         const rt = (globalThis as unknown as { EdgeRuntime?: { waitUntil(p: PromiseLike<unknown>): void } }).EdgeRuntime;
         if (rt) rt.waitUntil(write); else await write;
+      }
+      // pas na een geslaagde bewaring: precies één verzoek ziet het spel eindigen
+      const fin = finished as { g: GameRow; st: State; version: number } | null;
+      if (snapshot !== NOOP && fin) {
+        try { await rateOnline(fin.g, fin.st, fin.version); } catch (e) { console.error('rating', e); }
       }
       return json(snapshot === NOOP ? { ok: true } : snapshot);
     }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   newGame, applyAction, botAction, movesForRank, sevenNext, applySevenSteps, forwardTargets, START, ENTRY, TRACK,
   type State, type Piece, type Color, type Pos, RuleError, handHasMove, needsFreeExit, teamDone,
+  botActionLevel, asLevel, BOT_LEVELS, BOT_RATING, type BotLevel,
 } from '../lib/engine.ts';
 
 let passed = 0;
@@ -320,6 +321,28 @@ test('100 volledige computerspellen', () => {
     totalMoves += st.moveNo;
   }
   console.log(`  100 spellen, gem. ${Math.round(totalMoves / 100)} acties, winst ${wins}, ${Date.now() - t0}ms`);
+});
+
+test('niveaus: gemengde tafels (elke stoel een ander niveau) spelen altijd uit', () => {
+  for (let g = 0; g < 40; g++) {
+    const rng = mulberry(g + 501);
+    const st = newGame(g % 3 === 0 ? 'pro' : 'training', rng);
+    const lv: BotLevel[] = [0, 1, 2, 3].map((i) => BOT_LEVELS[(g + i * 2) % 5]);
+    let guard = 0;
+    while (st.winner === null && guard++ < 8000) {
+      const c = st.turn;
+      applyAction(st, c, botActionLevel(st, c, lv[c], rng));
+      checkInvariants(st);
+    }
+    assert.notEqual(st.winner, null, `spel met niveaus ${lv} eindigde niet`);
+  }
+});
+
+test('niveaus: ratings stijgen met het niveau, onbekend niveau = Gemiddeld', () => {
+  for (let i = 1; i < BOT_LEVELS.length; i++) assert.ok(BOT_RATING[BOT_LEVELS[i]] > BOT_RATING[BOT_LEVELS[i - 1]]);
+  assert.equal(asLevel(undefined), 3);
+  assert.equal(asLevel('9'), 3);
+  assert.equal(asLevel('1'), 1);
 });
 
 console.log(`${passed} tests OK`);

@@ -12,6 +12,8 @@ const out = process.env.SHOTS || '/tmp/';
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
   await p.goto(`${base}/oefenen?mode=${mode}`, { waitUntil: 'networkidle' });
+  // keuzescherm: niveaus van de computers (standaard laten) en starten
+  await p.click('.practice-setup .btn.primary');
   const stats = { turns: 0, plays: 0, discards: 0, stuck: 0, errorsShown: [] };
   const clickCenter = async (el) => { const bb = await el.boundingBox(); await p.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); };
   const logText = () => p.$eval('.log', (e) => e.innerText);

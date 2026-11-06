@@ -761,19 +761,23 @@ export function botActionSimple(st: State, c: Color, rng: () => number = Math.ra
 }
 
 // ---------- niveaus ----------
-export type BotLevel = 1 | 2 | 3 | 4;
-export const BOT_LEVELS: BotLevel[] = [1, 2, 3, 4];
+export type BotLevel = 1 | 2 | 3 | 4 | 5;
+export const BOT_LEVELS: BotLevel[] = [1, 2, 3, 4, 5];
 export const BOT_LEVEL_NAME: Record<BotLevel, { nl: string; en: string }> = {
   1: { nl: 'Beginner', en: 'Beginner' },
-  2: { nl: 'Gemiddeld', en: 'Average' },
-  3: { nl: 'Sterk', en: 'Strong' },
-  4: { nl: 'Expert', en: 'Expert' },
+  2: { nl: 'Makkelijk', en: 'Easy' },
+  3: { nl: 'Gemiddeld', en: 'Average' },
+  4: { nl: 'Sterk', en: 'Strong' },
+  5: { nl: 'Expert', en: 'Expert' },
 };
-/** Vaste Elo per niveau (geijkt met scripts/ai-tournament.ts; Gemiddeld = 1000 = startrating). */
-export const BOT_RATING: Record<BotLevel, number> = { 1: 800, 2: 1000, 3: 1150, 4: 1200 };
-export const asLevel = (x: unknown): BotLevel => ([1, 2, 3, 4].includes(Number(x)) ? Number(x) : 4) as BotLevel;
+/** Vaste Elo per niveau, gemeten met scripts/level-tournament.ts (Gemiddeld = 1000 = startrating van een mens). */
+// Gemeten (winstkans ploeg A tegen ploeg B): 2-1 81%, 3-2 86%, 3-1 96%, 4-3 68%, 5-4 61%, 5-3 76%.
+export const BOT_RATING: Record<BotLevel, number> = { 1: 450, 2: 700, 3: 1000, 4: 1130, 5: 1210 };
+export const DEFAULT_LEVEL: BotLevel = 3;
+export const asLevel = (x: unknown, fallback: BotLevel = DEFAULT_LEVEL): BotLevel =>
+  (BOT_LEVELS.includes(Number(x) as BotLevel) ? Number(x) : fallback) as BotLevel;
 
-/** Alle geldige speelzetten (voor de beginner die soms zomaar iets doet). */
+/** Alle geldige speelzetten (voor de zwakke niveaus die soms zomaar iets doen). */
 function legalPlays(st: State, c: Color): Action[] {
   const res: Action[] = [];
   const seen = new Set<Rank>();
@@ -787,17 +791,20 @@ function legalPlays(st: State, c: Color): Action[] {
   return res;
 }
 
+/** Kans op een willekeurige (vaak slechte) zet per niveau. */
+const RANDOM_MOVE: Record<BotLevel, number> = { 1: 0.5, 2: 0.3, 3: 0, 4: 0, 5: 0 };
+
 /** De computer op een bepaald niveau. */
-export function botActionLevel(st: State, c: Color, level: BotLevel = 4, rng: () => number = Math.random): Action {
-  if (level === 1) {
+export function botActionLevel(st: State, c: Color, level: BotLevel = 5, rng: () => number = Math.random): Action {
+  const p = RANDOM_MOVE[level] ?? 0;
+  if (p > 0) {
     const hand = st.hands[c];
-    if (!needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand) && handHasMove(st.pieces, c, hand) && rng() < 0.5) {
+    if (!needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand) && handHasMove(st.pieces, c, hand) && rng() < p) {
       const plays = legalPlays(st, c);
       if (plays.length) return plays[Math.floor(rng() * plays.length)];
     }
-    return botActionSimple(st, c, rng);
   }
-  if (level === 2) return botActionSimple(st, c, rng);
-  if (level === 3) return botAction(st, c, rng, { plan: 0, keep: 2.5 });
+  if (level <= 3) return botActionSimple(st, c, rng);
+  if (level === 4) return botAction(st, c, rng, { plan: 0, keep: 2.5 });
   return botAction(st, c, rng);
 }

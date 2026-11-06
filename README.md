@@ -22,6 +22,17 @@ npm test             # spelregel-tests + 100 computerspellen
 
 Oefenen tegen de computer (`/oefenen`) werkt volledig in de browser, zonder server.
 
+## Computers en rating
+
+- **5 niveaus**: Beginner, Makkelijk, Gemiddeld, Sterk, Expert (`botActionLevel` in `lib/engine.ts`).
+  Bij Oefenen kies je het niveau per computer (ploegmaat en beide tegenstanders apart); in een online kamer per computer-stoel in de lobby.
+- **Rating (Elo, zoals bij schaken)**: één rating per Google-account, start op 1000. Ploegrating = gemiddelde van beide spelers;
+  computers tellen mee met een vaste rating per niveau (450 / 700 / 1000 / 1130 / 1210). K = 40 voor je eerste 10 spellen, daarna 24.
+  Berekend in de database (`apply_match_result` in `supabase/migrations/0005_ratings.sql`), na elk uitgespeeld online spel (server) en oefenspel (`finish_practice`).
+- **Bot-ratings opnieuw meten** na een wijziging aan de computers:
+  `node --experimental-strip-types scripts/level-tournament.ts 3 2 400` (niveau A tegen B, toont het Elo-verschil).
+  Pas daarna `BOT_RATING` in `lib/engine.ts` én de tabel `bot_ratings` aan.
+
 ## Spelregels aanpassen
 
 1. Pas `lib/engine.ts` aan.

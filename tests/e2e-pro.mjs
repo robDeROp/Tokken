@@ -17,6 +17,7 @@ const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
 const pageErrors = [];
 p.on('pageerror', (e) => pageErrors.push(e.message));
 await p.goto(`${base}/oefenen?mode=${mode}`, { waitUntil: 'networkidle' });
+await p.click('.practice-setup .btn.primary');
 
 const st = () => p.evaluate(() => window.__tokken);
 const clickHole = async (key) => {

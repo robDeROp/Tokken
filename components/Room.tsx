@@ -16,8 +16,10 @@ import { TokskeCommentator } from './Tokske';
 import { moveDuration, dealDuration, dealTiming, SHUFFLE_MS } from '@/lib/board';
 import { getSpeed } from '@/lib/prefs';
 import CardFace, { RANK_ORDER, rankName } from './CardFace';
+import LevelPicker, { levelLabel } from './LevelPicker';
+import { currentUserId, waitForOnlineRating, type RatingInfo } from '@/lib/rating';
 
-export type Seat = { playerId: string | null; name: string; bot: boolean } | null;
+export type Seat = { playerId: string | null; name: string; bot: boolean; level?: number } | null;
 export interface GameRow {
   id: string; code: string; status: 'lobby' | 'playing' | 'finished'; mode: Mode; host_player: string;
   players: { id: string; name: string }[]; seats: Seat[]; state: PublicState | null; version: number;
@@ -121,6 +123,23 @@ export default function Room({ code }: { code: string }) {
     return () => clearTimeout(tm);
   }, [botTurn, token, me?.seat, game, code, accept]);
 
+  // na afloop: mijn rating-aanpassing ophalen (enkel als ik meespeelde en aangemeld ben)
+  const [rating, setRating] = useState<RatingInfo | null>(null);
+  const finishedKey = game?.status === 'finished' && pub?.winner !== null && pub?.winner !== undefined ? `${game.id}:${game.version}` : null;
+  const iPlayed = me?.seat !== null && me?.seat !== undefined;
+  useEffect(() => {
+    if (!finishedKey || !iPlayed || !game) { setRating(null); return; }
+    let alive = true;
+    setRating({ state: 'loading' });
+    void currentUserId().then(async (uid) => {
+      if (!uid) { if (alive) setRating({ state: 'login' }); return; }
+      const r = await waitForOnlineRating(game.id, uid, Date.now());
+      if (alive) setRating(r);
+    });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finishedKey, iPlayed]);
+
   const call = useCallback(async (body: Record<string, unknown>) => {
     if (inFlight.current) return;
     inFlight.current = true; setBusy(true); setMsg('');
@@ -144,11 +163,11 @@ export default function Room({ code }: { code: string }) {
     return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} /></Shell>;
   }
   return (
-    <Game chatToken={token} game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg} />
+    <Game chatToken={token} game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg} rating={rating} />
   );
 }
 
-function Shell({ children }: { children: React.ReactNode }) {
+export function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="shell">
       <header className="top">
@@ -189,7 +208,7 @@ function Lobby({ game, me, isHost, online, call, busy, msg }: {
   game: GameRow; me: Me | null; isHost: boolean; online: Set<string>;
   call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string;
 }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [copied, setCopied] = useState(false);
   const full = game.seats.every(Boolean);
   const seatedIds = new Set(game.seats.map((s) => s?.playerId).filter(Boolean));
@@ -214,12 +233,13 @@ function Lobby({ game, me, isHost, online, call, busy, msg }: {
                   <strong>{t.colors[i]}</strong>
                   <span className="muted small">{t.partner}: {t.teamNames[i % 2]}</span>
                   <span className="seat-who">
-                    {s ? <>{s.name}{mine ? ` (${t.you})` : ''}{s.playerId && !online.has(s.playerId) && !mine ? <em className="muted"> · {t.offline}</em> : null}</> : <span className="muted">{t.empty}</span>}
+                    {s ? <>{s.name}{s.bot ? <em className="muted"> · {levelLabel(s.level, lang)}</em> : null}{mine ? ` (${t.you})` : ''}{s.playerId && !online.has(s.playerId) && !mine ? <em className="muted"> · {t.offline}</em> : null}</> : <span className="muted">{t.empty}</span>}
                   </span>
                 </div>
                 <div className="seat-actions">
                   {!s && <button className="btn small" disabled={busy} onClick={() => call({ op: 'sit', seat: i })}>{t.sitHere}</button>}
-                  {!s && <button className="btn small ghost" disabled={busy} onClick={() => call({ op: 'addBot', seat: i })}>+ {t.addBot}</button>}
+                  {!s && <button className="btn small ghost" disabled={busy} onClick={() => call({ op: 'addBot', seat: i, level: 3 })}>+ {t.addBot}</button>}
+                  {s?.bot && <LevelPicker label={t.level} value={s.level} disabled={busy} onChange={(level) => call({ op: 'setBotLevel', seat: i, level })} />}
                   {s?.bot && <button className="btn small ghost" disabled={busy} onClick={() => call({ op: 'removeBot', seat: i })}>{t.removeBot}</button>}
                   {mine && <button className="btn small ghost" disabled={busy} onClick={() => call({ op: 'stand' })}>{t.standUp}</button>}
                 </div>
@@ -256,8 +276,11 @@ const lastLogNumber = (pub: PublicState) => pub.log.at(-1)?.n ?? -1;
 
 type Step = { piece: number; to: Pos };
 
-export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken, mascot }: {
+export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken, mascot, rating, rematchLabel }: {
   chatToken?: string;
+  /** Rating-aanpassing na afloop (null = niet tonen) */
+  rating?: RatingInfo | null;
+  rematchLabel?: string;
   /** Tokske geeft commentaar (oefenen) */
   mascot?: boolean;
   game: GameRow; pub: PublicState; me: Me | null; isHost: boolean; online: Set<string>;
@@ -522,6 +545,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
                   <span className="dot" />
                   <span className="pl-name">{s?.name ?? '—'}{seat === c && s?.name !== t.youCap ? ` (${t.you})` : ''}{off ? <em className="muted"> · {t.offline}</em> : null}</span>
                   <span className="pl-meta">
+                    {s?.bot && <span className="tag level-tag">{levelLabel(s.level, lang)}</span>}
                     {pub.dealer === c && <span className="tag">{t.dealer}</span>}
                     <span title={t.cards}>🂠 {pub.handCounts[c]}</span>
                     {pub.sticks[c] > 0 && <span title={t.sticks}>| {pub.sticks[c]}</span>}
@@ -594,7 +618,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
             <div className="win-dots">
               {[pub.winner, pub.winner + 2].map((c) => <span key={c} className="dot big" style={{ ['--c' as string]: COLOR_HEX[c] }} />)}
             </div>
-            {isHost && <button className="btn primary" onClick={() => call({ op: 'rematch' })}>{t.rematch}</button>}
+            {rating && <RatingResult r={rating} />}
+            {isHost && <button className="btn primary" onClick={() => call({ op: 'rematch' })}>{rematchLabel ?? t.rematch}</button>}
           </div>
         </div>
       )}
@@ -609,5 +634,18 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
         </div>
       )}
     </main>
+  );
+}
+
+function RatingResult({ r }: { r: RatingInfo }) {
+  const { t } = useT();
+  if (r.state === 'loading') return <p className="muted small">{t.ratingLoading}</p>;
+  if (r.state === 'login') return <p className="muted small">{t.ratingLogin}</p>;
+  if (r.state === 'none') return <p className="muted small">{r.reason ?? t.ratingNone}</p>;
+  return (
+    <p className={`rating-result ${r.delta >= 0 ? 'up' : 'down'}`}>
+      {t.rating}: <strong>{r.before}</strong> → <strong>{r.after}</strong>
+      <span className="rating-delta">{r.delta >= 0 ? `+${r.delta}` : r.delta}</span>
+    </p>
   );
 }
