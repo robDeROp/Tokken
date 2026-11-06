@@ -735,11 +735,13 @@ body {
 .board .seat-avatar .av-line.thin { stroke-width: 1.8; }
 .board .seat-avatar .av-antenna { stroke: #4a3a2a; stroke-width: 3; stroke-linecap: round; }
 .board .seat-avatar .av-spark { fill: #fff3b0; stroke: #b88a00; stroke-width: 1; }
-.board .turn-token { transition: transform .5s cubic-bezier(.45,0,.2,1); pointer-events: none; }
-.board .turn-token .tt-rim { fill: #8a5a2f; stroke: #5a3818; stroke-width: 2; }
-.board .turn-token .tt-face { fill: #f5cf2e; stroke: #9c7d00; stroke-width: 1.5; }
-.board .turn-token text { font: 800 12px var(--font-ui); fill: #4a3a00; text-anchor: middle; dominant-baseline: middle; letter-spacing: .02em; }
-.board .turn-token { animation: tt-pulse 1.6s ease-in-out infinite; }
+.board .turn-token { pointer-events: none; }
+.board .turn-token .tt-rim { fill: #8a5a2f; stroke: #5a3818; stroke-width: 2; transition: fill .35s; }
+.board .turn-token .tt-face { fill: #b08d63; stroke: #7a5a37; stroke-width: 1.5; transition: fill .35s, stroke .35s; }
+.board .turn-token text { font: 800 12px var(--font-ui); fill: #6e5236; text-anchor: middle; dominant-baseline: middle; letter-spacing: .02em; opacity: .55; transition: fill .35s, opacity .35s; }
+.board .turn-token.on .tt-face { fill: #f5cf2e; stroke: #9c7d00; }
+.board .turn-token.on text { fill: #4a3a00; opacity: 1; }
+.board .turn-token.on { animation: tt-pulse 1.6s ease-in-out infinite; }
 @keyframes tt-pulse { 0%, 100% { filter: drop-shadow(0 0 0 rgba(245, 207, 46, 0)); } 50% { filter: drop-shadow(0 0 8px rgba(245, 207, 46, .95)); } }
 .board .dealer-chip { transition: transform .5s cubic-bezier(.45,0,.2,1); pointer-events: none; }
 .board .dealer-chip text { font: 700 15px var(--font-ui); fill: #4a3626; text-anchor: middle; }
@@ -748,5 +750,5 @@ body {
 .board .fx-label text { font: 750 21px var(--font-ui); fill: #493c2d; text-anchor: middle; dominant-baseline: middle; }
 @media (prefers-reduced-motion: reduce) {
   .board .seat-avatar.active .av-body, .board .turn-token { animation: none; }
-  .board .turn-token, .board .dealer-chip { transition: none; }
+  .board .dealer-chip { transition: none; }
 }

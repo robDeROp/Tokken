@@ -390,17 +390,19 @@ export default function Board(p: Props) {
           </g>
         );
       })()}
-      {/* de beurt-token schuift naar wie aan de beurt is */}
-      {p.turn !== null && p.winner == null && (() => {
-        const [x, y] = V(rot(TOKEN_AT, p.turn));
+      {/* elke speler heeft een eigen beurt-token: gedoofd, en hij licht op als het zijn beurt is */}
+      {COLORS.map((c) => {
+        if (!p.seatKinds?.[c]) return null;
+        const [x, y] = V(rot(TOKEN_AT, c));
+        const on = p.turn === c && p.winner == null;
         return (
-          <g className="turn-token" style={{ transform: `translate(${x}px, ${y}px)` }} aria-hidden="true">
+          <g key={`tt${c}`} className={`turn-token ${on ? 'on' : ''}`} transform={`translate(${x} ${y})`} aria-hidden="true">
             <circle r={25} className="tt-rim" />
             <circle r={19} className="tt-face" />
             <text y={1}>{p.lang === 'nl' ? 'beurt' : 'turn'}</text>
           </g>
         );
-      })()}
+      })}
 
       <g className="rdr-engraving" transform="translate(0 -160)" aria-label="Rob De Rop Digital">
         <g transform="translate(-42 -20) scale(.84)" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
