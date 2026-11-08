@@ -337,3 +337,14 @@ export function playDeal(cards: number, gapMs: number, shuffleMs: number) {
     s.start(at, Math.random() * 0.5, 0.08);
   }
 }
+
+/** Alle 4 binnen: oplopend marimba-deuntje (hoger en met glinstering als het je eigen ploeg is). */
+export function playLaneDone(ours = false) {
+  const c = ready();
+  if (!c) return;
+  const t = c.currentTime + 0.02;
+  const notes = ours ? [523.25, 659.25, 783.99, 1046.5] : [392, 493.88, 587.33, 783.99];
+  notes.forEach((f, i) => marimba(c, t + i * 0.11, f, (ours ? 0.17 : 0.11) * (i === 3 ? 1.15 : 1), i === 3 ? 0.9 : 0.5));
+  knock(c, t + 0.44, ours ? 0.3 : 0.18);
+  if (ours) { marimba(c, t + 0.55, 1318.5, 0.12, 1); shimmer(c, t + 0.5, 0.07); }
+}

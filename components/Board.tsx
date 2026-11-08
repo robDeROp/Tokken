@@ -3,7 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { COLORS, TRACK, START, type Color, type Piece, type Pos, type CenterCard, type LastMove, type Card } from '@/lib/engine';
 import { trackXY, laneXY, kotXY, stickXY, trackLabelXY, laneLabelXY, rot, planMove, dealTiming, DEAL_CARDS, SHUFFLE_MS, type XY } from '@/lib/board';
 import { getSpeed, onSpeedChange, type Speed } from '@/lib/prefs';
-import { installUnlock, playMove, playWin, playYourTurn, playDeal } from '@/lib/sound';
+import { installUnlock, playMove, playWin, playYourTurn, playDeal, playLaneDone } from '@/lib/sound';
 import { rankLabel, SUIT } from './CardFace';
 import type { Lang } from '@/lib/i18n';
 
@@ -51,7 +51,7 @@ const TOKEN_AT: XY = [-422, 352];
 const DEALER_AT: XY = [-335, 268];
 const DECK_AT: XY = DEALER_AT; // de deler schudt op zijn eigen plek
 
-type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
+type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label' | 'glow' | 'pop'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
 let fxId = 0;
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -88,6 +88,7 @@ export default function Board(p: Props) {
   const prevKey = useRef<number | undefined>(undefined);
   const prevWinner = useRef(p.winner ?? null);
   const prevTurn = useRef(p.turn);
+  const [cheer, setCheer] = useState<Color | null>(null);
   const [fx, setFx] = useState<Fx[]>([]);
   const speed = useRef<Speed>('normal');
   useEffect(() => { installUnlock(); speed.current = getSpeed(); return onSpeedChange((v) => { speed.current = v; }); }, []);
@@ -134,6 +135,7 @@ export default function Board(p: Props) {
     const still = reducedMotion();
     const handled = new Set<number>();
     const items: Omit<Fx, 'id'>[] = [];
+    const landed = new Map<Color, number>(); // wanneer de laatste pion van een kleur in het huisje landt
 
     if (isNew && p.last) {
       const slotsPrev = new Map<number, number>();
@@ -179,12 +181,20 @@ export default function Board(p: Props) {
             frames = pts.map(([x, y]) => ({ transform: `translate(${x}px, ${y}px)` }));
           }
           el.animate(frames, { duration: s.dur, delay: s.delay, easing: s.kind === 'exit' || s.kind === 'swap' ? 'cubic-bezier(.35,0,.25,1)' : plan.hop ? 'linear' : 'cubic-bezier(.3,.05,.45,1)', fill: 'backwards' });
-          inn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.14, .86)', offset: 0.35 }, { transform: 'scale(.95, 1.05)', offset: 0.7 }, { transform: 'scale(1)' }],
-            { duration: 220, delay: s.delay + s.dur });
+          if (s.kind === 'home') {
+            // binnen: een vrolijk sprongetje in het huisje, het gaatje gloeit even goud na
+            inn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.18, .82)', offset: 0.18 }, { transform: 'scale(.9, 1.12) translateY(-9px)', offset: 0.45 },
+              { transform: 'scale(1.06, .94)', offset: 0.75 }, { transform: 'scale(1)' }], { duration: 480, delay: s.delay + s.dur, easing: 'ease-out' });
+            items.push({ kind: 'glow', x: is[0], y: is[1], color: s.color, delay: s.delay + s.dur });
+            landed.set(s.color, Math.max(landed.get(s.color) ?? 0, s.delay + s.dur));
+          } else {
+            inn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.14, .86)', offset: 0.35 }, { transform: 'scale(.95, 1.05)', offset: 0.7 }, { transform: 'scale(1)' }],
+              { duration: 220, delay: s.delay + s.dur });
+          }
           items.push({ kind: s.kind === 'home' ? 'home' : 'ripple', x: is[0], y: is[1], color: s.color, delay: s.delay + s.dur });
-          if (s.kind === 'home') for (let k = 0; k < 6; k++) {
-            const a = (k / 6) * Math.PI * 2 - Math.PI / 2, d = 30 + (k % 2) * 8;
-            items.push({ kind: 'spark', x: is[0] + Math.cos(a) * d, y: is[1] + Math.sin(a) * d, color: s.color, delay: s.delay + s.dur + 80 + k * 45 });
+          if (s.kind === 'home') for (let k = 0; k < 8; k++) {
+            const a = (k / 8) * Math.PI * 2 - Math.PI / 2, d = 30 + (k % 2) * 10;
+            items.push({ kind: 'spark', x: is[0] + Math.cos(a) * d, y: is[1] + Math.sin(a) * d, color: s.color, delay: s.delay + s.dur + 80 + k * 40 });
           }
           if (s.kind === 'exit') items.push({ kind: 'dust', x: pts[0][0], y: pts[0][1], color: s.color, delay: s.delay });
         }
@@ -213,6 +223,31 @@ export default function Board(p: Props) {
       const was = before.get(id);
       if (!was || Math.hypot(was[0] - is[0], was[1] - is[1]) < 1) continue;
       els.current.get(id)?.animate([{ transform: `translate(${was[0]}px, ${was[1]}px)` }, { transform: `translate(${is[0]}px, ${is[1]}px)` }], { duration: 170, easing: 'ease-out' });
+    }
+
+    // alle 4 binnen: de gaatjes lichten na elkaar op, een fonteintje knikkers, het figuurtje juicht
+    if (isNew && beforePieces) for (const c of COLORS) {
+      const inLane = (P: Piece[]) => P.filter((x) => x.color === c && x.pos.t === 'lane').length;
+      if (inLane(beforePieces) >= 4 || inLane(p.pieces) < 4) continue;
+      const t0 = (landed.get(c) ?? 0) + 260;
+      setTimeout(() => playLaneDone(p.mySeat != null && p.mySeat % 2 === c % 2), t0);
+      if (still) continue;
+      for (let k = 0; k < 4; k++) {
+        const [hx, hy] = V(laneXY(c, k));
+        items.push({ kind: 'home', x: hx, y: hy, color: c, delay: t0 + k * 110 });
+        items.push({ kind: 'glow', x: hx, y: hy, color: c, delay: t0 + k * 110 });
+      }
+      const [ax, ay] = V(laneXY(c, 1)), [bx, by] = V(laneXY(c, 2));
+      const mx = (ax + bx) / 2, my = (ay + by) / 2;
+      const toCenter = Math.atan2(-my, -mx); // fonteintje richting het midden van het bord
+      for (let k = 0; k < 16; k++) {
+        const a = toCenter + (Math.random() - 0.5) * 2.2, d = 70 + Math.random() * 80;
+        items.push({ kind: 'pop', x: mx, y: my, color: c, delay: t0 + 380 + Math.random() * 160, dx: Math.cos(a) * d, dy: Math.sin(a) * d, r: 0.45 + Math.random() * 0.35 });
+      }
+      const who = p.names[c];
+      if (who) items.push({ kind: 'label', x: 0, y: 60, color: c, delay: t0 + 300, dur: 2000, text: p.lang === 'nl' ? `${who} zit binnen!` : `${who} is home!` });
+      setTimeout(() => setCheer(c), t0);
+      setTimeout(() => setCheer((cur) => (cur === c ? null : cur)), t0 + 1600);
     }
 
     // winst
@@ -377,7 +412,7 @@ export default function Board(p: Props) {
         const kind = p.seatKinds?.[c];
         if (!kind) return null;
         const [x, y] = V(rot(AVATAR_AT, c));
-        return <SeatAvatar key={`av${c}`} c={c} kind={kind} x={x} y={y} active={p.turn === c} />;
+        return <SeatAvatar key={`av${c}`} c={c} kind={kind} x={x} y={y} active={p.turn === c} cheer={cheer === c} />;
       })}
       {/* de deler */}
       {p.dealer !== undefined && (() => {
@@ -479,10 +514,12 @@ export default function Board(p: Props) {
           const st = { animationDelay: `${f.delay}ms` } as React.CSSProperties;
           if (f.kind === 'ripple') return <circle key={f.id} cx={f.x} cy={f.y} r={20} className="fx-ripple" style={{ ...st, ['--s' as string]: f.r ?? 1 }} />;
           if (f.kind === 'dust') return <circle key={f.id} cx={f.x} cy={f.y} r={16} className="fx-dust" style={st} />;
+          if (f.kind === 'glow') return <circle key={f.id} cx={f.x} cy={f.y} r={21} className="fx-glow" style={st} />;
+          if (f.kind === 'pop') return <circle key={f.id} cx={f.x} cy={f.y} r={11 * (f.r ?? 1)} className="fx-pop" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
           if (f.kind === 'home') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><circle r={22} className="fx-home" stroke={COLOR_HEX[f.color]} style={st} /><circle r={22} className="fx-home late" stroke="#fff3c4" style={{ animationDelay: `${f.delay + 120}ms` }} /></g>;
           if (f.kind === 'deal') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-deal" style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg`, ['--dur' as string]: `${f.dur}ms` }}><rect x={-24} y={-34} width={48} height={68} rx={6} className="card-back" /></g></g>;
           if (f.kind === 'deck') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-deck" style={{ ['--dur' as string]: `${f.dur}ms` }}>{[0, 1, 2, 3].map((i) => <rect key={i} x={-28 + i * 1.5} y={-40 - i * 2.5} width={56} height={80} rx={7} className="card-back" />)}</g></g>;
-          if (f.kind === 'label') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-label" style={{ ['--dur' as string]: `${f.dur}ms` }}><rect x={-105} y={-21} width={210} height={42} rx={21} stroke={COLOR_HEX[f.color]} /><text x={0} y={1}>{f.text}</text></g></g>;
+          if (f.kind === 'label') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-label" style={{ ['--dur' as string]: `${f.dur}ms`, animationDelay: `${f.delay}ms` }}><rect x={-105} y={-21} width={210} height={42} rx={21} stroke={COLOR_HEX[f.color]} /><text x={0} y={1}>{f.text}</text></g></g>;
           if (f.kind === 'spark') return <path key={f.id} d={`M ${f.x} ${f.y - 7} L ${f.x + 2} ${f.y - 2} L ${f.x + 7} ${f.y} L ${f.x + 2} ${f.y + 2} L ${f.x} ${f.y + 7} L ${f.x - 2} ${f.y + 2} L ${f.x - 7} ${f.y} L ${f.x - 2} ${f.y - 2} Z`} className="fx-spark" style={st} />;
           if (f.kind === 'splinter') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><rect x={-2} y={-7} width={4} height={13} rx={2} className="fx-splinter" fill={COLOR_HEX[f.color]} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg` }} /></g>;
           return <circle key={f.id} cx={f.x} cy={f.y} r={9 * (f.r ?? 1)} className="fx-confetti" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
@@ -493,9 +530,9 @@ export default function Board(p: Props) {
 }
 
 /** Klein figuurtje in de stijl van Tokske: een knikker met een gezichtje in de kleur van de speler. */
-function SeatAvatar({ c, kind, x, y, active }: { c: Color; kind: SeatKind; x: number; y: number; active: boolean }) {
+function SeatAvatar({ c, kind, x, y, active, cheer }: { c: Color; kind: SeatKind; x: number; y: number; active: boolean; cheer?: boolean }) {
   return (
-    <g transform={`translate(${x} ${y})`} className={`seat-avatar ${active ? 'active' : ''}`} aria-hidden="true">
+    <g transform={`translate(${x} ${y})`} className={`seat-avatar ${active ? 'active' : ''} ${cheer ? 'cheer' : ''}`} aria-hidden="true">
       <ellipse cx={0} cy={30} rx={20} ry={4} className="av-shadow" />
       <g className="av-body">
         {kind === 'robot' && <><line x1={0} y1={-26} x2={0} y2={-39} className="av-antenna" /><circle cy={-41} r={4.5} fill={COLOR_HEX[c]} stroke={COLOR_DARK[c]} strokeWidth={1.5} /></>}

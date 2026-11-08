@@ -842,3 +842,23 @@ body {
   .pc-hero strong { font-size: 2rem; }
   .player-card { padding: 18px 14px; }
 }
+
+/* ---------- pion binnen / alle 4 binnen ---------- */
+.fx-glow { fill: rgba(255, 220, 120, .55); opacity: 0; animation: fx-glow .95s ease-out both; filter: blur(1px); }
+@keyframes fx-glow { 0% { opacity: 0; transform: scale(.6); } 25% { opacity: 1; transform: scale(1.15); } 100% { opacity: 0; transform: scale(1); } }
+.fx-pop { opacity: 0; animation: fx-pop .95s cubic-bezier(.2,.75,.35,1) both; }
+@keyframes fx-pop {
+  0% { opacity: 1; transform: translate(0, 0) scale(.4); }
+  60% { opacity: 1; transform: translate(var(--dx), var(--dy)) scale(1); }
+  100% { opacity: 0; transform: translate(calc(var(--dx) * 1.08), calc(var(--dy) * 1.08 + 26px)) scale(.8); }
+}
+.board .seat-avatar.cheer .av-body { animation: av-cheer 1.5s cubic-bezier(.3,.7,.3,1) both; }
+@keyframes av-cheer {
+  0% { transform: translateY(0) rotate(0); }
+  20% { transform: translateY(-22px) rotate(-12deg) scale(1.08); }
+  38% { transform: translateY(0) rotate(0) scale(1.1, .9); }
+  58% { transform: translateY(-16px) rotate(360deg) scale(1.06); }
+  76% { transform: translateY(0) rotate(360deg) scale(1.08, .92); }
+  100% { transform: translateY(0) rotate(360deg) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .board .seat-avatar.cheer .av-body { animation: none; } }
