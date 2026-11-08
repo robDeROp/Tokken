@@ -223,6 +223,8 @@ export function playMove(last: LastMove | null, plan: Plan | null, me: number | 
     clack(c, at, 0.42);
     rollBed(c, at + 0.05, plan.killMs / 1000 * 0.8, 0.07);
     tok(c, at + plan.killMs / 1000, 0.3, 0.85);
+    tok(c, at + (plan.killMs * 1.36) / 1000, 0.13, 0.9);  // nastuiteren in het kot
+    tok(c, at + (plan.killMs * 1.55) / 1000, 0.06, 0.95);
     if (me === null || i > 0) return;
     const team = (x: number) => x % 2;
     if (k.color === me) sad(c, at + 0.12, 1);                       // jij bent geslagen

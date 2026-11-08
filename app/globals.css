@@ -862,3 +862,17 @@ body {
   100% { transform: translateY(0) rotate(360deg) scale(1); }
 }
 @media (prefers-reduced-motion: reduce) { .board .seat-avatar.cheer .av-body { animation: none; } }
+
+/* ---------- geslagen worden ---------- */
+.fx-bang { fill: #fff6d6; stroke: #3a2614; stroke-width: 2.5; stroke-linejoin: round; opacity: 0; animation: fx-bang .38s cubic-bezier(.2,1.4,.4,1) both; }
+@keyframes fx-bang { 0% { opacity: 1; transform: scale(.2) rotate(-20deg); } 45% { opacity: 1; transform: scale(1.15) rotate(6deg); } 100% { opacity: 0; transform: scale(1.3) rotate(10deg); } }
+.fx-ghost { opacity: 0; animation: fx-ghost .42s ease-out both; }
+@keyframes fx-ghost { 0% { opacity: .45; transform: scale(1); } 100% { opacity: 0; transform: scale(.6); } }
+.board .seat-avatar.ouch .av-body { animation: av-ouch .9s ease-out both; }
+@keyframes av-ouch {
+  0% { transform: translateX(0) rotate(0); } 10% { transform: translateX(-6px) rotate(-10deg); } 22% { transform: translateX(6px) rotate(9deg); }
+  34% { transform: translateX(-5px) rotate(-7deg); } 46% { transform: translateX(4px) rotate(5deg); } 60% { transform: translateX(-2px) rotate(-2deg); } 100% { transform: translateX(0) rotate(0); }
+}
+.board .seat-avatar .av-dizzy { transform-box: fill-box; transform-origin: center; animation: av-dizzy .5s linear infinite; }
+@keyframes av-dizzy { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .board .seat-avatar.ouch .av-body, .board .seat-avatar .av-dizzy { animation: none; } }

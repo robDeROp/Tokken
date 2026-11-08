@@ -51,7 +51,7 @@ const TOKEN_AT: XY = [-422, 352];
 const DEALER_AT: XY = [-335, 268];
 const DECK_AT: XY = DEALER_AT; // de deler schudt op zijn eigen plek
 
-type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label' | 'glow' | 'pop'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
+type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label' | 'glow' | 'pop' | 'bang' | 'ghost'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
 let fxId = 0;
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -89,6 +89,7 @@ export default function Board(p: Props) {
   const prevWinner = useRef(p.winner ?? null);
   const prevTurn = useRef(p.turn);
   const [cheer, setCheer] = useState<Color | null>(null);
+  const [ouch, setOuch] = useState<Color | null>(null);
   const [fx, setFx] = useState<Fx[]>([]);
   const speed = useRef<Speed>('normal');
   useEffect(() => { installUnlock(); speed.current = getSpeed(); return onSpeedChange((v) => { speed.current = v; }); }, []);
@@ -204,10 +205,33 @@ export default function Board(p: Props) {
           if (!el || !was || !is) continue;
           handled.add(k.piece);
           if (Math.hypot(was[0] - is[0], was[1] - is[1]) < 1) continue;
-          const mx = (was[0] + is[0]) / 2 * 1.12, my = (was[1] + is[1]) / 2 * 1.12;
-          el.animate([{ transform: `translate(${was[0]}px, ${was[1]}px)` }, { transform: `translate(${mx}px, ${my}px)`, offset: 0.45 }, { transform: `translate(${is[0]}px, ${is[1]}px)` }],
-            { duration: plan.killMs, delay: k.delay, easing: 'cubic-bezier(.2,.6,.35,1)', fill: 'backwards' });
-          inn?.animate([{ transform: 'scale(1) rotate(0deg)' }, { transform: 'scale(1.35) rotate(300deg)', offset: 0.45 }, { transform: 'scale(1) rotate(620deg)' }], { duration: plan.killMs, delay: k.delay, easing: 'ease-out' });
+          // weggekatapulteerd: hoge boog (naar buiten), dan twee keer nastuiteren in het kot
+          const mx = (was[0] + is[0]) / 2 * 1.22, my = (was[1] + is[1]) / 2 * 1.22;
+          const fly = plan.killMs, bounce = Math.round(fly * 0.55);
+          const nx = is[0] - mx, ny = is[1] - my, nl = Math.hypot(nx, ny) || 1; // stuiter-richting: terug langs de aanvliegroute
+          const bx = (-nx / nl) * 16, byy = (-ny / nl) * 16;
+          el.animate([
+            { transform: `translate(${was[0]}px, ${was[1]}px)` },
+            { transform: `translate(${mx}px, ${my}px)`, offset: 0.4 },
+            { transform: `translate(${is[0]}px, ${is[1]}px)`, offset: 0.66, easing: 'ease-out' },
+            { transform: `translate(${is[0] + bx}px, ${is[1] + byy}px)`, offset: 0.78, easing: 'ease-in' },
+            { transform: `translate(${is[0]}px, ${is[1]}px)`, offset: 0.88, easing: 'ease-out' },
+            { transform: `translate(${is[0] + bx * 0.35}px, ${is[1] + byy * 0.35}px)`, offset: 0.94, easing: 'ease-in' },
+            { transform: `translate(${is[0]}px, ${is[1]}px)` },
+          ], { duration: fly + bounce, delay: k.delay, easing: 'cubic-bezier(.2,.6,.35,1)', fill: 'backwards' });
+          inn?.animate([{ transform: 'scale(1) rotate(0deg)' }, { transform: 'scale(1.4) rotate(320deg)', offset: 0.4 }, { transform: 'scale(1) rotate(640deg)', offset: 0.66 },
+            { transform: 'scale(1.12, .86) rotate(640deg)', offset: 0.7 }, { transform: 'scale(1) rotate(660deg)' }], { duration: fly + bounce, delay: k.delay, easing: 'ease-out' });
+          // schimmetjes langs de boog
+          for (let g = 1; g <= 4; g++) {
+            const t = g / 5, u = 1 - t;
+            const gx = u * u * was[0] + 2 * u * t * mx + t * t * is[0], gy = u * u * was[1] + 2 * u * t * my + t * t * is[1];
+            items.push({ kind: 'ghost', x: gx, y: gy, color: k.color, delay: k.delay + t * (fly + bounce) * 0.66, r: 1 - g * 0.12 });
+          }
+          items.push({ kind: 'bang', x: was[0], y: was[1], color: k.color, delay: k.delay });
+          items.push({ kind: 'dust', x: is[0], y: is[1], color: k.color, delay: k.delay + (fly + bounce) * 0.66 });
+          const victim = k.color as Color;
+          setTimeout(() => setOuch(victim), k.delay + 60);
+          setTimeout(() => setOuch((cur) => (cur === victim ? null : cur)), k.delay + 1100);
           const by = p.last.by as Color;
           for (let i = 0; i < 9; i++) {
             const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5, d = 34 + Math.random() * 26;
@@ -412,7 +436,7 @@ export default function Board(p: Props) {
         const kind = p.seatKinds?.[c];
         if (!kind) return null;
         const [x, y] = V(rot(AVATAR_AT, c));
-        return <SeatAvatar key={`av${c}`} c={c} kind={kind} x={x} y={y} active={p.turn === c} cheer={cheer === c} />;
+        return <SeatAvatar key={`av${c}`} c={c} kind={kind} x={x} y={y} active={p.turn === c} cheer={cheer === c} ouch={ouch === c} />;
       })}
       {/* de deler */}
       {p.dealer !== undefined && (() => {
@@ -514,6 +538,9 @@ export default function Board(p: Props) {
           const st = { animationDelay: `${f.delay}ms` } as React.CSSProperties;
           if (f.kind === 'ripple') return <circle key={f.id} cx={f.x} cy={f.y} r={20} className="fx-ripple" style={{ ...st, ['--s' as string]: f.r ?? 1 }} />;
           if (f.kind === 'dust') return <circle key={f.id} cx={f.x} cy={f.y} r={16} className="fx-dust" style={st} />;
+          if (f.kind === 'bang') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><path className="fx-bang" style={st}
+            d="M0,-34 L8,-13 L30,-20 L16,-3 L33,10 L11,12 L9,33 L-3,16 L-21,28 L-15,7 L-34,-2 L-13,-9 L-20,-28 L-4,-15 Z" /></g>;
+          if (f.kind === 'ghost') return <circle key={f.id} cx={f.x} cy={f.y} r={17 * (f.r ?? 1)} className="fx-ghost" fill={`url(#m${f.color})`} style={st} />;
           if (f.kind === 'glow') return <circle key={f.id} cx={f.x} cy={f.y} r={21} className="fx-glow" style={st} />;
           if (f.kind === 'pop') return <circle key={f.id} cx={f.x} cy={f.y} r={11 * (f.r ?? 1)} className="fx-pop" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
           if (f.kind === 'home') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><circle r={22} className="fx-home" stroke={COLOR_HEX[f.color]} style={st} /><circle r={22} className="fx-home late" stroke="#fff3c4" style={{ animationDelay: `${f.delay + 120}ms` }} /></g>;
@@ -530,16 +557,22 @@ export default function Board(p: Props) {
 }
 
 /** Klein figuurtje in de stijl van Tokske: een knikker met een gezichtje in de kleur van de speler. */
-function SeatAvatar({ c, kind, x, y, active, cheer }: { c: Color; kind: SeatKind; x: number; y: number; active: boolean; cheer?: boolean }) {
+function SeatAvatar({ c, kind, x, y, active, cheer, ouch }: { c: Color; kind: SeatKind; x: number; y: number; active: boolean; cheer?: boolean; ouch?: boolean }) {
   return (
-    <g transform={`translate(${x} ${y})`} className={`seat-avatar ${active ? 'active' : ''} ${cheer ? 'cheer' : ''}`} aria-hidden="true">
+    <g transform={`translate(${x} ${y})`} className={`seat-avatar ${active ? 'active' : ''} ${cheer ? 'cheer' : ''} ${ouch ? 'ouch' : ''}`} aria-hidden="true">
       <ellipse cx={0} cy={30} rx={20} ry={4} className="av-shadow" />
       <g className="av-body">
         {kind === 'robot' && <><line x1={0} y1={-26} x2={0} y2={-39} className="av-antenna" /><circle cy={-41} r={4.5} fill={COLOR_HEX[c]} stroke={COLOR_DARK[c]} strokeWidth={1.5} /></>}
         {kind === 'ai' && <path d="M 17 -34 l 2.6 6 6 2.6 -6 2.6 -2.6 6 -2.6 -6 -6 -2.6 6 -2.6 z" className="av-spark" />}
         <circle r={27} fill={`url(#m${c})`} stroke={COLOR_DARK[c]} strokeWidth={2} />
         <ellipse cx={-10} cy={-15} rx={8} ry={5} fill="#fff" opacity={0.55} transform="rotate(-28 -10 -15)" />
-        {kind === 'robot' ? (
+        {ouch ? (
+          <g>
+            <path d="M -14 -4 a 5 5 0 1 1 5 5 a 3 3 0 1 1 -3 -3" className="av-line thin av-dizzy" />
+            <path d="M 4 -4 a 5 5 0 1 1 5 5 a 3 3 0 1 1 -3 -3" className="av-line thin av-dizzy" />
+            <ellipse cx={0} cy={12} rx={5} ry={4} className="av-line" />
+          </g>
+        ) : kind === 'robot' ? (
           <g>
             <rect x={-15} y={-8} width={11} height={10} rx={2.5} className="av-eye" />
             <rect x={4} y={-8} width={11} height={10} rx={2.5} className="av-eye" />
