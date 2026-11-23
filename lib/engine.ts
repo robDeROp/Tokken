@@ -689,7 +689,7 @@ export function botAction(st: State, c: Color, rng: () => number = Math.random, 
     const p = st.pieces.find((x) => x.color === c && x.pos.t === 'kot')!;
     return { type: 'freeExit', piece: p.id };
   }
-  if (!handHasMove(st.pieces, c, hand)) return { type: 'discardAll' };
+  if (!handHasMove(st.pieces, c, hand)) return stuckDiscard(st, c);
   const t = teamOf(c);
   const cands: { a: Action; s: number; P: Piece[]; card: Card }[] = [];
   const seen = new Set<Rank>();
@@ -728,6 +728,18 @@ export function botAction(st: State, c: Color, rng: () => number = Math.random, 
   return cands[0].a;
 }
 
+/** Vastgelopen: alles afgooien loont enkel als het een stokje oplevert (nog niets gespeeld deze ronde).
+ *  Anders gooi je één kaart af (de minst nuttige) en hou je de rest bij voor als het bord verandert. */
+export function stuckDiscard(st: State, c: Color): Action {
+  const hand = st.hands[c];
+  if (hand.length > 1 && playedCardThisRound(st, c)) {
+    const order: Rank[] = ['2', '3', '6', '8', '9', '10', 'Q', 'JK', '4', '7', 'A', 'K', 'J', '5'];
+    const sorted = hand.slice().sort((a, b) => order.indexOf(a.rank) - order.indexOf(b.rank));
+    return { type: 'discardOne', card: sorted[0].id };
+  }
+  return { type: 'discardAll' };
+}
+
 function discardChoice(st: State, c: Color): Action {
   const hand = st.hands[c];
   const P = st.pieces;
@@ -749,7 +761,7 @@ export function botActionSimple(st: State, c: Color, rng: () => number = Math.ra
     const p = st.pieces.find((x) => x.color === c && x.pos.t === 'kot')!;
     return { type: 'freeExit', piece: p.id };
   }
-  if (!handHasMove(st.pieces, c, hand)) return { type: 'discardAll' };
+  if (!handHasMove(st.pieces, c, hand)) return stuckDiscard(st, c);
   const t = teamOf(c);
   let best: { a: Action; s: number } | null = null;
   const seen = new Set<Rank>();

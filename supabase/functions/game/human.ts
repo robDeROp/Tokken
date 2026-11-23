@@ -50,9 +50,9 @@ export function moveFeatures(st: State, c: Color, cd: Cand, value: number): numb
 export interface HumanModel { features: readonly string[]; w: number[] }
 
 /** Kans per kandidaat dat een mens hem kiest (softmax van het voorkeursmodel). temp > 1 = losser. */
-export function humanProbs(st: State, c: Color, cands: Cand[], values: number[], model: HumanModel | null = HUMAN_MODEL, temp = 1): number[] {
+export function humanProbs(st: State, c: Color, cands: Cand[], values: number[], model: HumanModel | null = HUMAN_MODEL, temp = 1, adj?: number[]): number[] {
   if (!model) { const best = values.indexOf(Math.max(...values)); return values.map((_, i) => (i === best ? 1 : 0)); }
-  const s = cands.map((cd, i) => moveFeatures(st, c, cd, values[i]).reduce((acc, v, k) => acc + v * (model.w[k] ?? 0), 0) / temp);
+  const s = cands.map((cd, i) => moveFeatures(st, c, cd, values[i]).reduce((acc, v, k) => acc + v * (model.w[k] ?? 0), 0) / temp + (adj?.[i] ?? 0));
   const mx = Math.max(...s);
   const e = s.map((x) => Math.exp(x - mx));
   const z = e.reduce((x, y) => x + y, 0);

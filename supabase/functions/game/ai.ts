@@ -4,7 +4,7 @@
 // Getraind met scripts/ai-train/*. Gewichten in ai-weights.ts. Gedeeld door website en server.
 import {
   START, ENTRY, TRACK, COLORS, teamOf, partnerOf, allInLane, teamDone, pieceAtTrack, makeDeck, applyAction,
-  handHasMove, needsFreeExit, allMovesForCard, matchMove, progress, hitChance, botActionLevel, asLevel, BOT_LEVEL_NAME,
+  handHasMove, needsFreeExit, playedCardThisRound, allMovesForCard, matchMove, progress, hitChance, botActionLevel, asLevel, BOT_LEVEL_NAME,
   type State, type Piece, type Color, type Card, type Rank, type Action, type Team, type BotLevel,
 } from './engine.ts';
 import { AI_NET } from './ai-weights.ts';
@@ -275,11 +275,38 @@ function teamKills(before: Piece[], after: Piece[], c: Color): number {
 /** Een mens slaat zijn ploegmaat enkel als het duidelijk loont: straf in winstkans per geslagen eigen pion. */
 const TEAM_KILL_PENALTY = 0.04;
 
+/** Hoeveel pionnen van mijn ploegmaat ik met mijn eigen blokkade (pion op mijn eigen 1) tegenhou:
+ *  zijn pion staat vlak achter mijn 1 en moet erlangs naar zijn huisje. Dichtbij weegt zwaarder.
+ *  (Het netwerk ziet enkel blokkades van de andere ploeg; een mens houdt zijn ploegmaat niet nodeloos vast.) */
+export function teamBlocks(P: Piece[], c: Color): number {
+  const s = START(c);
+  const me = P.find((p) => p.color === c && p.pos.t === 'track' && p.pos.i === s);
+  if (!me) return 0;
+  const mate = partnerOf(c);
+  let n = 0;
+  for (const p of P) {
+    if (p.color !== mate || p.pos.t !== 'track') continue;
+    const d = (s - p.pos.i + TRACK) % TRACK;          // vakjes tot aan mijn blokkade
+    const toEntry = (ENTRY(mate) - p.pos.i + TRACK) % TRACK;
+    if (d < 1 || d > 13 || d > toEntry) continue;      // ver weg of hij gaat eerst zijn huisje in
+    n += d <= 7 ? 1 : 0.5;
+  }
+  return n;
+}
+const TEAM_BLOCK_PENALTY = 0.05;
+/** Zelfde straf in het voorkeursmodel van De Kloon (in logit-punten; "blijf op je 1" weegt daar ~3,5). */
+const HUMAN_TEAM_BLOCK = 6;
+
+/** Menselijke correcties bovenop de netwerkschatting. */
+function teamPenalty(before: Piece[], after: Piece[], c: Color): number {
+  return TEAM_KILL_PENALTY * teamKills(before, after, c) + TEAM_BLOCK_PENALTY * teamBlocks(after, c);
+}
+
 /** Kies een actie: meestal de beste; soms (kans `slip`) een mindere zoals een mens die iets over het hoofd ziet.
  *  De kost van die mindere zet volgt de verdeling die we bij echte spelers zagen (vooral kleine foutjes). */
 export function chooseAction(cands: Cand[], c: Color, slip: number, rng: () => number, net: Net | null = AI_NET, before?: Piece[], slipCost = 0.015): Action {
   if (cands.length === 1) return cands[0].a;
-  const vals = cands.map((cd) => valueOf(cd.view, c, net) - (before ? TEAM_KILL_PENALTY * teamKills(before, cd.view.pieces, c) : 0));
+  const vals = cands.map((cd) => valueOf(cd.view, c, net) - (before ? teamPenalty(before, cd.view.pieces, c) : 0));
   let best = 0;
   for (let i = 1; i < vals.length; i++) if (vals[i] > vals[best] + 1e-9 || (Math.abs(vals[i] - vals[best]) <= 1e-9 && rng() < 0.5)) best = i;
   if (slip <= 0 || rng() >= slip) return cands[best].a;
@@ -302,16 +329,19 @@ export function aiAction(st: State, c: Color, persona: Persona, rng: () => numbe
   }
   let cands = candidates(st, c, rng);
   if (cands.some((cd) => cd.a.type === 'discardAll')) {
-    // Vastgelopen. Kaarten bijhouden (één per één afgooien, de laatste als "alles" voor het stokje)
-    // loont enkel als ze deze ronde nog iets kunnen doen; anders meteen alles afgooien.
-    const wait = persona.smartDiscard && hand.length > 1 && waitingPays(st, c);
+    // Vastgelopen. Alles afgooien levert enkel een stokje op als je deze ronde nog niets speelde;
+    // heb je al gespeeld, dan wint alles afgooien niets en hou je beter kaarten bij voor als het bord
+    // verandert (een blokkade die opengaat, een ploegmaat die je buitenspeelt). Dan één kaart afgooien.
+    // Kan je wel een stokje krijgen, dan wachten enkel de slimme computers als dat loont.
+    const noStick = playedCardThisRound(st, c);
+    const wait = hand.length > 1 && (noStick || (persona.smartDiscard && waitingPays(st, c)));
     const pick = cands.filter((cd) => (wait ? cd.a.type !== 'discardAll' : cd.a.type !== 'discardOne'));
     if (pick.length) cands = pick;
   }
   if (!cands.length) return { type: 'discardAll' };
   if (persona.think && cands.length > 1) {
     // eerst snel schatten, dan de beste kandidaten echt doordenken
-    const scored = cands.map((cd) => ({ cd, v: valueOf(cd.view, c, net) - TEAM_KILL_PENALTY * teamKills(st.pieces, cd.view.pieces, c) }))
+    const scored = cands.map((cd) => ({ cd, v: valueOf(cd.view, c, net) - teamPenalty(st.pieces, cd.view.pieces, c) }))
       .sort((x, y) => y.v - x.v);
     const top = scored.slice(0, persona.think.top);
     if (top.length > 1) {
@@ -320,7 +350,7 @@ export function aiAction(st: State, c: Color, persona: Persona, rng: () => numbe
         let sum = 0;
         for (const seed of seeds) sum += lookahead(st, c, t.cd.a, seed, net, !!persona.think!.humanOpp);
         // half de gedachte toekomst, half de eerste indruk
-        t.v = 0.5 * t.v + 0.5 * (sum / seeds.length - TEAM_KILL_PENALTY * teamKills(st.pieces, t.cd.view.pieces, c));
+        t.v = 0.5 * t.v + 0.5 * (sum / seeds.length - teamPenalty(st.pieces, t.cd.view.pieces, c));
       }
       top.sort((x, y) => y.v - x.v);
       return top[0].cd.a;
@@ -328,7 +358,10 @@ export function aiAction(st: State, c: Color, persona: Persona, rng: () => numbe
   }
   if (persona.human && cands.length > 1) {
     const vals = cands.map((cd) => valueOf(cd.view, c, net));
-    return cands[sampleIndex(humanProbs(st, c, cands, vals, undefined, persona.human.temp), rng)].a;
+    // Echte spelers blijven graag op hun eigen 1 staan (sterke voorkeur in move_log), maar niet als
+    // ze daarmee hun ploegmaat tegenhouden: dat weegt zwaarder dan die gewoonte.
+    const adj = cands.map((cd) => -HUMAN_TEAM_BLOCK * teamBlocks(cd.view.pieces, c) - 4 * teamKills(st.pieces, cd.view.pieces, c));
+    return cands[sampleIndex(humanProbs(st, c, cands, vals, undefined, persona.human.temp, adj), rng)].a;
   }
   return chooseAction(cands, c, persona.slip, rng, net, st.pieces, persona.slipCost);
 }

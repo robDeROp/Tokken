@@ -3,7 +3,11 @@ import {
   newGame, applyAction, botAction, movesForRank, sevenNext, applySevenSteps, forwardTargets, START, ENTRY, TRACK,
   type State, type Piece, type Color, type Pos, RuleError, handHasMove, needsFreeExit, teamDone,
   botActionLevel, asLevel, BOT_LEVELS, ROBOT_LEVELS, AI_LEVELS, BOT_RATING, type BotLevel,
+  partnerOf,
 } from '../lib/engine.ts';
+import { botMove, teamBlocks } from '../lib/ai.ts';
+const botMoveForTest = (st: State, c: Color, l: BotLevel) => botMove(st, c, l, mulberryOr(7));
+function mulberryOr(a: number) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 let passed = 0;
 function test(name: string, fn: () => void) {
@@ -373,6 +377,45 @@ test('bijdrage: binnengebrachte pionnen per speler tellen op tot 8 bij de winnen
     // 4 + 4 pionnen van de winnaars kwamen binnen via hun eigen zetten (tegenstanders kunnen met een 5 meeduwen)
     assert.ok(h[w] + h[w + 2] <= 8 && h[w] + h[w + 2] >= 6, `winnaars ${h}`);
     assert.ok(h[1 - w] + h[3 - w] <= 7, `verliezers ${h}`);
+  }
+});
+
+test('vastgelopen na al gespeeld te hebben: één kaart afgooien, niet alles (geen stokje te winnen)', () => {
+  for (const level of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as BotLevel[]) {
+    const st = newGame('training', () => 0.3);
+    const c = st.turn;
+    // alles in het kot, geen aas/koning/joker: niets te spelen
+    st.hands[c] = st.hands[c].filter((h) => !['A', 'K', 'JK'].includes(h.rank)).slice(0, 4);
+    if (st.hands[c].length < 3) st.hands[c] = [{ id: 901, rank: '3', suit: 'S' }, { id: 902, rank: '9', suit: 'H' }, { id: 903, rank: '5', suit: 'D' }];
+    st.playedThisRound[c] = true;
+    const a = botMoveForTest(st, c, level);
+    assert.equal(a.type, 'discardOne', `niveau ${level} gooide alles af zonder stokje`);
+    // nog niets gespeeld: alles afgooien voor het stokje mag wel
+    st.playedThisRound[c] = false;
+    assert.equal(botMoveForTest(st, c, level).type, 'discardAll', `niveau ${level} pakt het stokje niet`);
+  }
+});
+
+test('ploegmaat niet vasthouden: computer gaat van zijn eigen 1 als zijn ploegmaat er vlak achter staat', () => {
+  for (const level of [6, 7, 8, 9, 10] as BotLevel[]) {
+    let moved = 0;
+    for (let g = 0; g < 10; g++) {
+      const st = newGame('training', mulberryOr(g + 50));
+      const c = st.turn, mate = partnerOf(c);
+      const P = emptyPieces();
+      const mine = P.filter((p) => p.color === c), his = P.filter((p) => p.color === mate);
+      mine[0].pos = tr(START(c));                       // mijn blokkade
+      mine[1].pos = tr((START(c) + 10) % TRACK);        // een andere pion die ook kan lopen
+      his[0].pos = tr((START(c) - 2 + TRACK) % TRACK);  // ploegmaat vlak achter mijn 1
+      for (const o of [((c + 1) % 4) as Color, ((c + 3) % 4) as Color]) P.find((p) => p.color === o)!.pos = tr((START(o) + 40) % TRACK);
+      st.pieces = P;
+      st.hands[c] = [{ id: 901, rank: '3', suit: 'S' }, { id: 902, rank: '9', suit: 'H' }, { id: 903, rank: '6', suit: 'D' }];
+      st.playedThisRound[c] = true;
+      assert.ok(teamBlocks(P, c) > 0);
+      const a = botMove(st, c, level, mulberryOr(g + 7));
+      if (a.type === 'play' && a.move.kind === 'step' && a.move.piece === mine[0].id) moved++;
+    }
+    assert.ok(moved >= 9, `niveau ${level} bleef ${10 - moved}/10 keer zijn ploegmaat blokkeren`);
   }
 });
 
