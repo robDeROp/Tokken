@@ -351,10 +351,13 @@ test('niveaus: gemengde tafels (elke stoel een ander niveau) spelen altijd uit',
 });
 
 test('niveaus: ratings stijgen met het niveau, onbekend niveau = Gemiddeld', () => {
-  for (const group of [ROBOT_LEVELS, AI_LEVELS]) for (let i = 1; i < group.length; i++) assert.ok(BOT_RATING[group[i]] > BOT_RATING[group[i - 1]]);
-  assert.equal(BOT_LEVELS.length, 9);
+  // De Kloon (10) speelt zoals de mensen en staat los van de sterkte-volgorde van Jules..Bompa Fons
+  const selfPlay = AI_LEVELS.filter((l) => l !== 10);
+  for (const group of [ROBOT_LEVELS, selfPlay]) for (let i = 1; i < group.length; i++) assert.ok(BOT_RATING[group[i]] > BOT_RATING[group[i - 1]]);
+  assert.equal(BOT_LEVELS.length, 10);
   assert.equal(asLevel(undefined), 3);
-  assert.equal(asLevel('10'), 3);
+  assert.equal(asLevel('10'), 10);
+  assert.equal(asLevel('11'), 3);
   assert.equal(asLevel('9'), 9);
   assert.equal(asLevel('1'), 1);
 });

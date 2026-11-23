@@ -10,7 +10,7 @@ import Leaderboard from '@/components/Leaderboard';
 import { BrandTag, MadeBy } from '@/components/Brand';
 import { COLOR_HEX } from '@/components/Board';
 import { TokskeHero } from '@/components/Tokske';
-import { ThemePicker } from '@/components/SoundToggle';
+import { ThemeButton } from '@/components/ThemeSheet';
 
 export default function Home() {
   const { t, lang } = useT();
@@ -68,7 +68,7 @@ export default function Home() {
     <main className="shell home">
       <header className="top">
         <BrandTag />
-        <LangToggle />
+        <div className="top-right"><ThemeButton /><LangToggle /></div>
       </header>
 
       <section className="hero">
@@ -137,11 +137,6 @@ export default function Home() {
       <Leaderboard userId={user?.id ?? null} />
 
       <Scoreboard />
-
-      <section className="panel home-themes">
-        <h2>{lang === 'nl' ? 'Kies je bord' : 'Pick your board'}</h2>
-        <ThemePicker />
-      </section>
 
       <section className="panel rules-home">
         <h2>{t.rules}</h2>

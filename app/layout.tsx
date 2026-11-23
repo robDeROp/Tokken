@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import '@fontsource-variable/bricolage-grotesque';
 import '@fontsource/kalam/400.css';
 import '@fontsource/kalam/700.css';
+import '@fontsource/press-start-2p/400.css';
 import { LangProvider } from '@/lib/i18n';
 import './globals.css';
 import { THEME_BOOT } from '@/lib/themes';

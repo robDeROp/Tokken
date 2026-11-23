@@ -898,7 +898,13 @@ body {
 
 /* ======================= thema's =======================
    Elk thema zet dezelfde variabelen; het bord (SVG) en de tafel lezen ze. */
-:root, :root[data-theme="klassiek"] {
+:root, [data-theme="klassiek"] {
+  --side-bg: rgba(245, 240, 229, .97); --side-edge: rgba(250, 246, 237, .55); --side-ink: #332c23; --side-muted: #655a4b; --side-row: #eee7d9;
+  --table-size: auto;
+  --panel-bg: #c99a65; --panel-edge: #806043; --panel-ink: #2b251e; --panel-speck: .08; --panel-row: #fbf8f299;
+  --accent: #f5cf2e; --accent-ink: #2a2622;
+  --card-face: #f7f3e9; --card-edge: #cbbda7; --card-black: #221c16; --card-red: #a94335;
+  --top-ink: #ffffff;
   --wood-1: #d5ad7b; --wood-2: #c99a65; --wood-3: #b98550;
   --edge-1: #855a37; --edge-2: #edcf9f; --edge-3: #a46d41; --edge-4: #d9b17b;
   --frame: #65452f;
@@ -910,7 +916,13 @@ body {
   --table-bg: radial-gradient(ellipse at 50% 44%, #344b3e 0%, #293e34 56%, #22362d 100%);
   --deco-op: 0;
 }
-:root[data-theme="walnoot"] {
+[data-theme="walnoot"] {
+  --side-bg: rgba(58, 36, 20, .96); --side-edge: rgba(200, 160, 110, .35); --side-ink: #f6e6c8; --side-muted: #cdb38f; --side-row: rgba(255, 240, 215, .08);
+  --table-size: auto;
+  --panel-bg: #5b3a24; --panel-edge: #2c1a0e; --panel-ink: #f6e6c8; --panel-speck: .05; --panel-row: rgba(255, 240, 215, .1);
+  --accent: #e0b25a; --accent-ink: #2a1a0c;
+  --card-face: #fbf3e4; --card-edge: #b99a74; --card-black: #241a12; --card-red: #9e2b25;
+  --top-ink: #fbeeda;
   --wood-1: #7e5131; --wood-2: #6a4126; --wood-3: #55321c;
   --edge-1: #2c1a0e; --edge-2: #a77950; --edge-3: #4a2d18; --edge-4: #8c6240;
   --frame: #1f120a;
@@ -921,7 +933,13 @@ body {
   --card-back: #1f3b2b; --card-back-edge: #e9d7b3;
   --table-bg: radial-gradient(ellipse at 50% 40%, #5a2a2c 0%, #431d20 55%, #2e1214 100%);
 }
-:root[data-theme="nacht"] {
+[data-theme="nacht"] {
+  --side-bg: rgba(26, 32, 48, .96); --side-edge: rgba(201, 163, 90, .55); --side-ink: #ece3cc; --side-muted: #b9ae94; --side-row: rgba(230, 199, 125, .08);
+  --table-size: auto;
+  --panel-bg: #1c2230; --panel-edge: #c9a35a; --panel-ink: #ece3cc; --panel-speck: .03; --panel-row: rgba(230, 199, 125, .09);
+  --accent: #e6c77d; --accent-ink: #1a1d26;
+  --card-face: #f4efe2; --card-edge: #c9a35a; --card-black: #1b1f2a; --card-red: #b1352a;
+  --top-ink: #f3e6c4;
   --wood-1: #353b48; --wood-2: #2a2f3a; --wood-3: #1f232c;
   --edge-1: #5a4520; --edge-2: #f0d48c; --edge-3: #8a6b34; --edge-4: #d8b76c;
   --frame: #0d0f14;
@@ -938,7 +956,13 @@ body {
     radial-gradient(ellipse at 50% 35%, #1b2a4d 0%, #111d38 55%, #0a1226 100%);
   --deco-op: .1;
 }
-:root[data-theme="picknick"] {
+[data-theme="picknick"] {
+  --side-bg: rgba(255, 250, 242, .97); --side-edge: rgba(184, 50, 42, .45); --side-ink: #3a1a0c; --side-muted: #7a5446; --side-row: #f6e7dc;
+  --table-size: 34px 34px;
+  --panel-bg: #fff6ea; --panel-edge: #b8322a; --panel-ink: #3a1a0c; --panel-speck: 0; --panel-row: rgba(184, 50, 42, .07);
+  --accent: #ffd166; --accent-ink: #3a1a0c;
+  --card-face: #fffdf8; --card-edge: #e0bfa8; --card-black: #2a1a12; --card-red: #c0392b;
+  --top-ink: #ffffff;
   --wood-1: #c46f46; --wood-2: #a8552f; --wood-3: #8f4424;
   --edge-1: #4f2210; --edge-2: #eab08a; --edge-3: #7a3519; --edge-4: #cf8a62;
   --frame: #3e1a0c;
@@ -953,8 +977,13 @@ body {
     linear-gradient(rgba(255, 255, 255, .28) 50%, transparent 50%),
     #b8322a;
 }
-:root[data-theme="picknick"] body { background-size: 34px 34px; }
-:root[data-theme="strand"] {
+[data-theme="strand"] {
+  --side-bg: rgba(251, 245, 232, .97); --side-edge: rgba(201, 180, 142, .6); --side-ink: #23404a; --side-muted: #5c7178; --side-row: #efe6d3;
+  --table-size: auto;
+  --panel-bg: #f4ead6; --panel-edge: #c9b48e; --panel-ink: #23404a; --panel-speck: .06; --panel-row: rgba(15, 111, 122, .07);
+  --accent: #5cc8cf; --accent-ink: #08363b;
+  --card-face: #fffaf0; --card-edge: #d8c7a6; --card-black: #1f3640; --card-red: #c0503a;
+  --top-ink: #f4fbfb;
   --wood-1: #ece0c8; --wood-2: #dccbae; --wood-3: #c9b48e;
   --edge-1: #8f7b58; --edge-2: #fbf3e3; --edge-3: #b09a74; --edge-4: #e7d7ba;
   --frame: #6f6046;
@@ -968,7 +997,13 @@ body {
     radial-gradient(ellipse at 50% 35%, #12707a 0%, #0d4f56 55%, #08363b 100%);
   --deco-op: .35;
 }
-:root[data-theme="winter"] {
+[data-theme="winter"] {
+  --side-bg: rgba(247, 250, 252, .97); --side-edge: rgba(159, 178, 195, .6); --side-ink: #23374d; --side-muted: #5d7186; --side-row: #e8eef4;
+  --table-size: auto;
+  --panel-bg: #eef3f7; --panel-edge: #9fb2c3; --panel-ink: #23374d; --panel-speck: .05; --panel-row: rgba(95, 125, 155, .09);
+  --accent: #a8dcf5; --accent-ink: #123326;
+  --card-face: #ffffff; --card-edge: #b8c8d6; --card-black: #1d2b3a; --card-red: #b3202f;
+  --top-ink: #f4f9fc;
   --wood-1: #f3f6f8; --wood-2: #e1e8ee; --wood-3: #cbd6e0;
   --edge-1: #6f8599; --edge-2: #ffffff; --edge-3: #9fb2c3; --edge-4: #e6edf3;
   --frame: #4d6175;
@@ -986,14 +1021,27 @@ body {
     radial-gradient(ellipse at 50% 35%, #1b4a37 0%, #123326 55%, #0b2118 100%);
   --deco-op: .55;
 }
-body { background: var(--table-bg); background-attachment: fixed; }
+body { background: var(--table-bg); background-size: var(--table-size); background-attachment: fixed; }
+/* panelen, knoppen en speelkaarten volgen het thema */
+.panel { background-color: var(--panel-bg); border-color: var(--panel-edge); color: var(--panel-ink); }
+.panel h1, .panel h2, .panel h3, .panel label, .panel strong, .panel b { color: inherit; }
+.panel .muted, .panel .small.muted { color: color-mix(in srgb, var(--panel-ink) 68%, transparent); }
+.panel a:not(.btn) { color: inherit; }
+.leaderboard li { background: var(--panel-row); }
+.leaderboard li.lb-bot { color: color-mix(in srgb, var(--panel-ink) 75%, transparent); border-color: color-mix(in srgb, var(--panel-ink) 30%, transparent); }
+.leaderboard .lb-open:hover, .leaderboard .lb-open:focus-visible { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); }
+.pcard { background: var(--card-face); border-color: var(--card-edge); color: var(--card-black); }
+.pcard.red { color: var(--card-red); }
+.board .card-front { fill: var(--card-face); stroke: var(--card-edge); }
+.top, .top .logo, .game > .top .logo { color: var(--top-ink); }
 .board .num { fill: var(--num); stroke: var(--num-halo); }
 .board .hole-arch { stroke: var(--arch); }
 .board .hole { stroke: var(--hole-rim); }
 .board .rdr-engraving { color: var(--engrave); opacity: var(--engrave-op); }
 .board .card-back { fill: var(--card-back); stroke: var(--card-back-edge); }
 .board .deco { display: none; pointer-events: none; }
-:root[data-theme="winter"] .board .deco-snow, :root[data-theme="nacht"] .board .deco-stars, :root[data-theme="strand"] .board .deco-sand { display: inline; opacity: var(--deco-op); }
+[data-theme="winter"] .board .deco-snow, [data-theme="nacht"] .board .deco-stars, [data-theme="strand"] .board .deco-sand { display: inline; opacity: var(--deco-op); }
 body, .board .num, .board .hole-arch { transition: background-color .3s ease; }
 
 /* themakiezer */
@@ -1009,7 +1057,110 @@ body, .board .num, .board .hole-arch { transition: background-color .3s ease; }
 .home-themes h2 { font-size: 1rem; margin: 0 0 8px; color: inherit; }
 .home-themes .theme-picker { justify-content: center; }
 /* donkere borden: namen in ploegkleur krijgen een lichte rand */
-:root[data-theme="walnoot"] .board .seat-name:not(.active-seat), :root[data-theme="nacht"] .board .seat-name:not(.active-seat) {
+[data-theme="walnoot"] .board .seat-name:not(.active-seat), [data-theme="nacht"] .board .seat-name:not(.active-seat) {
   stroke: rgba(250, 240, 220, .85); stroke-width: 5px; stroke-linejoin: round; paint-order: stroke;
 }
-:root[data-theme="walnoot"] .board .engraving-name, :root[data-theme="nacht"] .board .engraving-name { letter-spacing: 2px; }
+[data-theme="walnoot"] .board .engraving-name, [data-theme="nacht"] .board .engraving-name { letter-spacing: 2px; }
+
+/* ---------- stijl kiezen ---------- */
+.panel { background-image:
+  radial-gradient(circle at 20% 30%, rgb(255 255 255 / var(--panel-speck)) 0 1px, transparent 2px),
+  radial-gradient(circle at 70% 60%, rgb(90 50 20 / calc(var(--panel-speck) * 1.5)) 0 1px, transparent 2px); }
+.top .theme-btn { color: var(--top-ink); border-color: color-mix(in srgb, var(--top-ink) 55%, transparent); gap: 6px; }
+.theme-overlay { z-index: 60; }
+.theme-sheet { width: min(760px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto; margin: 0; }
+.ts-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ts-head h2 { margin: 0; }
+.ts-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; margin: 14px 0 6px; }
+.ts-tile { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 8px; border-radius: 14px; padding: 6px;
+  border: 2px solid transparent; transition: transform .12s ease, border-color .12s ease; }
+.ts-tile:hover { transform: translateY(-2px); }
+.ts-tile:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.ts-tile.on { border-color: var(--panel-ink); }
+.ts-name { display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 700; }
+.ts-check { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--panel-ink); color: var(--panel-bg); font-size: 12px; }
+.ts-done { align-self: flex-end; margin-top: 8px; }
+/* het voorbeeld zelf: tafel, stukje bord, kaart, paneel */
+.tp-scene { position: relative; height: 150px; border-radius: 10px; overflow: hidden; background: var(--table-bg); background-size: var(--table-size); box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.tp-board { position: absolute; left: 10px; top: 10px; width: 62%; height: 98px; border-radius: 9px;
+  background: linear-gradient(180deg, var(--wood-1), var(--wood-2) 50%, var(--wood-3)); border: 3px solid var(--frame); box-shadow: 0 6px 14px rgba(0,0,0,.3); }
+.tp-grain { position: absolute; inset: 0; border-radius: 6px;
+  background: repeating-linear-gradient(176deg, transparent 0 9px, color-mix(in srgb, var(--grain-dark) 18%, transparent) 9px 10px); }
+.tp-hole { position: absolute; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; border-radius: 50%;
+  background: radial-gradient(circle at 50% 40%, var(--hole-1), var(--hole-2) 70%, var(--hole-3)); box-shadow: inset 0 2px 3px rgba(0,0,0,.45), 0 -1px 0 var(--arch); }
+.tp-marble { position: absolute; width: 15px; height: 15px; margin: -7.5px 0 0 -7.5px; border-radius: 50%; box-shadow: 0 2px 2px rgba(0,0,0,.35); }
+.tp-marble.y { background: radial-gradient(circle at 35% 30%, #fff 0 12%, #f5cf2e 30%, #a88a12); }
+.tp-marble.b { background: radial-gradient(circle at 35% 30%, #fff 0 12%, #1d5fd6 30%, #0d3a8a); }
+.tp-card { position: absolute; right: -30px; top: 18px; width: 38px; height: 54px; border-radius: 5px; background: var(--card-face); border: 1px solid var(--card-edge);
+  color: var(--card-red); display: grid; place-items: center; transform: rotate(9deg); box-shadow: 0 4px 8px rgba(0,0,0,.3); font: 800 14px/1 var(--font-ui); }
+.tp-card b { position: absolute; left: 4px; top: 3px; font-size: 11px; }
+.tp-card i { font-style: normal; font-size: 20px; }
+.tp-panel { position: absolute; left: 10px; right: 10px; bottom: 10px; height: 30px; border-radius: 7px; background: var(--panel-bg); border: 2px solid var(--panel-edge);
+  color: var(--panel-ink); display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 10px; font: 750 13px var(--font-hand); }
+.tp-btn { font: 700 11px var(--font-ui); padding: 3px 10px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); border: 1.5px solid var(--accent-ink); }
+
+/* zijpanelen in het spel (spelers, verloop, chat) volgen het thema */
+.side > div { background: var(--side-bg); border-color: var(--side-edge); color: var(--side-ink); }
+.pl-meta, .log li { color: var(--side-muted); }
+.chat h3, .log h3, .pl-name { color: var(--side-ink); }
+.pl.now { background: color-mix(in srgb, var(--c) 14%, var(--side-bg)); }
+.chat-message { background: var(--side-row); color: var(--side-ink); }
+.chat-message.own { background: color-mix(in srgb, var(--accent) 18%, var(--side-row)); }
+.side .muted, .side .small, .side p { color: var(--side-muted); }
+.side .chat-message p { color: var(--side-ink); }
+
+[data-theme="retro"] {
+  --side-bg: rgba(8, 10, 28, .96); --side-edge: #2b44ff; --side-ink: #e8ecff; --side-muted: #9aa6ff; --side-row: rgba(43, 68, 255, .14);
+  --table-size: auto;
+  --panel-bg: #070818; --panel-edge: #2b44ff; --panel-ink: #e8ecff; --panel-speck: 0; --panel-row: rgba(43, 68, 255, .14);
+  --accent: #ffd23f; --accent-ink: #05060f;
+  --card-face: #f6f6ff; --card-edge: #2b44ff; --card-black: #05060f; --card-red: #e0183c;
+  --top-ink: #e8ecff;
+  --wood-1: #070818; --wood-2: #05060f; --wood-3: #03040a;
+  --edge-1: #10208a; --edge-2: #5a6bff; --edge-3: #1b2cff; --edge-4: #3a4cff;
+  --frame: #000000;
+  --grain-dark: #000000; --grain-dark-op: 0; --grain-light: #ffffff; --grain-light-op: 0;
+  --hole-1: #000000; --hole-2: #04050c; --hole-3: #000000; --hole-rim: #2b44ff; --arch: transparent;
+  --num: #ffd23f; --num-halo: #05060f;
+  --engrave: #ff3ea5; --engrave-op: .75;
+  --card-back: #05060f; --card-back-edge: #ff3ea5;
+  --table-bg:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 38%, #12163a 0%, #080a1e 55%, #020309 100%);
+  --deco-op: 0;
+}
+.board .pellet, .board .retro-wall { display: none; }
+[data-theme="retro"] .board .pellet { display: inline; fill: #ffd9a3; filter: drop-shadow(0 0 3px rgba(255, 217, 163, .8)); pointer-events: none; }
+[data-theme="retro"] .board .pellet.power { animation: retro-blink .8s steps(2, jump-none) infinite; }
+@keyframes retro-blink { 50% { opacity: .15; } }
+[data-theme="retro"] .board .retro-wall { display: inline; fill: none; stroke: #2b44ff; stroke-width: 5; filter: drop-shadow(0 0 6px rgba(60, 90, 255, .9)); pointer-events: none; }
+[data-theme="retro"] .board .retro-wall.inner { stroke-width: 3; }
+[data-theme="retro"] .board .hole { stroke-width: 3; filter: drop-shadow(0 0 3px rgba(43, 68, 255, .7)); }
+[data-theme="retro"] .board .num { font-family: 'Press Start 2P', monospace; font-size: 12px; font-weight: 400; letter-spacing: 0; stroke-width: 4px; }
+[data-theme="retro"] .board .num.num-wide { font-size: 11px; }
+[data-theme="retro"] .board .seat-name { font-family: 'Press Start 2P', monospace; font-size: 13px; font-weight: 400; stroke: #05060f; stroke-width: 4px; paint-order: stroke; }
+[data-theme="retro"] .board .engraving-name, [data-theme="retro"] .board .engraving-sub { font-family: 'Press Start 2P', monospace; font-weight: 400; }
+[data-theme="retro"] .board .engraving-name { font-size: 11px; }
+[data-theme="retro"] .board .engraving-sub { font-size: 6px; }
+[data-theme="retro"] .board .rdr-engraving { filter: drop-shadow(0 0 4px #ff3ea5); }
+[data-theme="retro"] .board .marble .mb { filter: drop-shadow(0 0 5px rgba(255, 255, 255, .35)); }
+[data-theme="retro"] .board .card-back { filter: drop-shadow(0 0 4px rgba(255, 62, 165, .6)); }
+[data-theme="retro"] .board .turn-marker rect { fill: #05060f; stroke: #ffd23f; }
+[data-theme="retro"] .board .turn-marker text { fill: #ffd23f; font-family: 'Press Start 2P', monospace; font-size: 12px; font-weight: 400; }
+[data-theme="retro"] .panel { box-shadow: 0 0 0 1px #2b44ff, 0 0 18px rgba(43, 68, 255, .45), 0 14px 30px rgba(0, 0, 0, .5); border-radius: 10px; }
+[data-theme="retro"] .panel h1, [data-theme="retro"] .panel h2, [data-theme="retro"] .panel h3, [data-theme="retro"] .h-hand {
+  font-family: 'Press Start 2P', monospace; font-weight: 400; color: #ffd23f; letter-spacing: 0; font-size: 1rem; line-height: 1.5; }
+[data-theme="retro"] .btn { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: .72rem; letter-spacing: 0; border-radius: 4px; }
+[data-theme="retro"] .btn.primary { box-shadow: 0 0 0 2px #05060f, 0 0 12px rgba(255, 210, 63, .55); }
+[data-theme="retro"] .hero h1 { font-family: 'Press Start 2P', monospace; font-weight: 400; color: #ffd23f; text-shadow: 4px 4px 0 #2b44ff, 0 0 22px rgba(255, 210, 63, .45); letter-spacing: 0; }
+[data-theme="retro"] .logo { font-family: 'Press Start 2P', monospace; font-size: 1rem; color: #ffd23f; }
+[data-theme="retro"] .pcard { border-width: 2px; box-shadow: 0 0 10px rgba(43, 68, 255, .5); }
+[data-theme="retro"] .pcard .ci, [data-theme="retro"] .pcard .cs { font-family: 'Press Start 2P', monospace; font-weight: 400; }
+[data-theme="retro"] .pcard .ci { font-size: .7rem; }
+[data-theme="retro"] .turn-banner { font-family: 'Press Start 2P', monospace; font-size: .7rem; }
+[data-theme="retro"] .board .seat-name { filter: brightness(2.3) saturate(1.4); }
+[data-theme="retro"] .tp-board { border-color: #2b44ff; box-shadow: 0 0 10px rgba(43, 68, 255, .8); }
+[data-theme="retro"] .tp-hole { box-shadow: 0 0 0 2px #2b44ff, 0 0 6px #2b44ff; }
+[data-theme="retro"] .tp-hole::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #ffd9a3; box-shadow: 0 0 4px #ffd9a3; }
+[data-theme="retro"] .tp-panel { font-family: 'Press Start 2P', monospace; font-size: 8px; }
+[data-theme="retro"] .tp-btn { font-family: 'Press Start 2P', monospace; font-size: 7px; border-radius: 3px; }

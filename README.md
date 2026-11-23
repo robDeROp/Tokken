@@ -115,3 +115,14 @@ De huidige variant blijft vier spelers in twee ploegen. Zes spelers vraagt een a
   ```sql
   select mode, seat, player_name, action, state_before from move_log where not is_bot order by game_id, move_no;
   ```
+
+## Update: thema's, opgeven, De Kloon en een sterker netwerk
+
+- **Thema's** (`lib/themes.ts`, CSS-variabelen in `app/globals.css`): Klassiek, Walnoot, Nacht, Picknick, Strand, Winter. Kiezen op de startpagina of in het menu; per toestel bewaard.
+- **Opgeven** in oefenspellen (menu → Opgeven): telt als verlies via `resign_practice` (rating zodra er 30 zetten gelogd zijn).
+- **Mensenmodel** (`lib/human.ts`, gewichten in `lib/human-weights.ts`): leert uit `move_log` hoe echte spelers kiezen, bovenop de inschatting van het netwerk. Opnieuw leren met meer data:
+  1. Exporteer de mensenzetten uit `move_log` naar het formaat van `scripts/ai-train/human.ts` (één regel per zet, velden met `|`).
+  2. `node --experimental-strip-types scripts/ai-train/humanmodel.ts human_moves.txt human_model.json`
+  3. Zet het resultaat in `lib/human-weights.ts` en `npm run sync-engine`.
+- **De Kloon** (niveau 10): speelt met dat mensenmodel, dus zoals jullie.
+- **Netwerk ronde 3**: 30.000 nieuwe spellen (AI, robots én spelers die als mensen spelen), 96 verborgen neuronen. Arena: wint 54% tegen het vorige netwerk.

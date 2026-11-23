@@ -384,6 +384,9 @@ export default function Board(p: Props) {
       <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#decoSnow)" className="deco deco-snow" />
       <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#decoStars)" className="deco deco-stars" />
       <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#decoSand)" className="deco deco-sand" />
+      {/* retro arcade: dubbele neonmuur rond het bord, zoals een doolhof */}
+      <rect x="-494" y="-494" width="988" height="988" rx="28" className="retro-wall" />
+      <rect x="-482" y="-482" width="964" height="964" rx="20" className="retro-wall inner" />
       <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="none" style={{ stroke: 'var(--frame)' }} strokeOpacity=".23" strokeWidth="2" />
 
       {/* gaatjes van het parcours */}
@@ -397,6 +400,7 @@ export default function Board(p: Props) {
             <circle cx={x} cy={y} r={17} fill="url(#hole)" />
             {own !== null && <circle cx={x} cy={y} r={17} fill={`url(#h${own})`} />}
             <circle cx={x} cy={y} r={17} fill="url(#pit)" />
+            <circle cx={x} cy={y} r={4} className="pellet" />
             <path d={`M ${x - 11} ${y - 7} A 13 13 0 0 1 ${x + 11} ${y - 7}`} className="hole-arch" />
             {lastTo.has(key) && <circle cx={x} cy={y} r={22} className="last-ring" />}
             {hl.has(key) && <circle cx={x} cy={y} r={21} className="dest-ring" />}
@@ -419,6 +423,7 @@ export default function Board(p: Props) {
                 <circle cx={x} cy={y} r={17} fill="url(#hole)" />
                 <circle cx={x} cy={y} r={17} fill={`url(#h${c})`} />
                 <circle cx={x} cy={y} r={17} fill="url(#pit)" />
+                <circle cx={x} cy={y} r={6.5} className="pellet power" />
                 <path d={`M ${x - 11} ${y - 7} A 13 13 0 0 1 ${x + 11} ${y - 7}`} className="hole-arch" />
                 {lastTo.has(key) && <circle cx={x} cy={y} r={22} className="last-ring" />}
                 {hl.has(key) && <circle cx={x} cy={y} r={21} className="dest-ring" />}

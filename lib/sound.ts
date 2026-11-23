@@ -5,6 +5,7 @@
 // dus we ontgrendelen bij de eerste interactie, waar die ook gebeurt.
 import type { LastMove } from './engine';
 import type { Plan } from './board';
+import { currentTheme } from './themes';
 
 const KEY = 'tokken-sound';
 let ctx: AudioContext | null = null;
@@ -178,6 +179,7 @@ function marimba(c: AudioContext, at: number, freq: number, vol: number, ring = 
 /** Speel een zet af, precies gelijk met de animatie op het bord. */
 /** @param me jouw kleur (null = toeschouwer): bepaalt het juich- of jammergeluid bij slaan */
 export function playMove(last: LastMove | null, plan: Plan | null, me: number | null = null) {
+  if (currentTheme() === 'retro') { retroMove(last, plan, me); return; }
   const c = ready();
   if (!c || !last) return;
   const t0 = c.currentTime + 0.02;
@@ -274,6 +276,7 @@ function shimmer(c: AudioContext, at: number, vol: number) {
 }
 
 export function playYourTurn() {
+  if (currentTheme() === 'retro') { retroTurn(); return; }
   const c = ready();
   if (!c) return;
   const t = c.currentTime + 0.02;
@@ -283,6 +286,7 @@ export function playYourTurn() {
 
 /** Einde van het spel: fanfare op marimba met knikkers die in de doos rollen; zachter en dalend bij verlies. */
 export function playWin(won = true) {
+  if (currentTheme() === 'retro') { retroWin(won); return; }
   const c = ready();
   if (!c) return;
   const t = c.currentTime + 0.05;
@@ -320,6 +324,7 @@ export function playClick() {
 
 /** Uitdelen: eerst schudden (ritsel), dan per kaart een zacht "flits"-je. */
 export function playDeal(cards: number, gapMs: number, shuffleMs: number) {
+  if (currentTheme() === 'retro') { retroDeal(cards, gapMs, shuffleMs); return; }
   const c = ready();
   if (!c) return;
   const t = c.currentTime + 0.02;
@@ -365,4 +370,98 @@ function whoosh(c: AudioContext, at: number, dur: number) {
   g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
   s.connect(bp); bp.connect(g); g.connect(out!);
   s.start(at, Math.random() * 0.3, dur + 0.05);
+}
+
+// ---------- Retro arcade: alles klinkt als een oude spelcomputer (blokgolven) ----------
+/** Eén 8-bit piepje, eventueel glijdend naar een andere toon. */
+function blip(c: AudioContext, at: number, f: number, dur: number, vol = 0.05, type: OscillatorType = 'square', to?: number) {
+  const o = c.createOscillator(); o.type = type;
+  o.frequency.setValueAtTime(f, at);
+  if (to) o.frequency.exponentialRampToValueAtTime(to, at + dur);
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3800;
+  const g = c.createGain();
+  g.gain.setValueAtTime(vol, at);
+  g.gain.setValueAtTime(vol, at + dur * 0.8);
+  g.gain.linearRampToValueAtTime(0.0001, at + dur);
+  o.connect(lp); lp.connect(g); g.connect(out!);
+  o.start(at); o.stop(at + dur + 0.02);
+}
+function crunch(c: AudioContext, at: number, dur: number, vol = 0.12) {
+  // 8-bit ontploffing: ruis door een "bitcrush"-achtige lage filter
+  const s = c.createBufferSource(); s.buffer = noise!; s.playbackRate.value = 0.25;
+  const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.setValueAtTime(2400, at); lp.frequency.exponentialRampToValueAtTime(200, at + dur);
+  const g = c.createGain(); g.gain.setValueAtTime(vol, at); g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  s.connect(lp); lp.connect(g); g.connect(out!); s.start(at, Math.random() * 0.3, dur + 0.05);
+}
+const NOTE = (n: number) => 440 * Math.pow(2, (n - 69) / 12); // MIDI-nummer -> Hz
+
+function retroMove(last: LastMove | null, plan: Plan | null, me: number | null) {
+  const c = ready();
+  if (!c || !last) return;
+  const t0 = c.currentTime + 0.02;
+  const ms = (x: number) => t0 + x / 1000;
+  if (last.kind === 'play') blip(c, t0, NOTE(84), 0.04, 0.04);
+  else if (last.kind === 'discardOne') blip(c, t0, NOTE(72), 0.05, 0.035, 'square', NOTE(66));
+  else if (last.kind === 'discardAll') {
+    [72, 69, 66, 63].forEach((n, i) => blip(c, t0 + i * 0.06, NOTE(n), 0.05, 0.035));
+    if (last.earnsStick) [76, 79].forEach((n, i) => blip(c, t0 + 0.32 + i * 0.07, NOTE(n), 0.06, 0.04, 'triangle'));
+  }
+  if (!plan) return;
+  for (const sg of plan.segs) {
+    const start = ms(sg.delay), end = ms(sg.delay + sg.dur);
+    if (sg.kind === 'exit' || sg.kind === 'swap') {
+      blip(c, start, NOTE(55), sg.dur / 1000 * 0.9, 0.04, 'square', NOTE(79)); // opstijgen
+      blip(c, end, NOTE(84), 0.05, 0.04);
+      continue;
+    }
+    // per gaatje een piepje, afwisselend hoog/laag ("happen")
+    for (let k = 1; k <= sg.holes; k++) {
+      const at = start + (k * sg.dur) / sg.holes / 1000 - 0.02;
+      blip(c, at, NOTE(k % 2 ? 67 : 72), 0.035, 0.03, 'triangle');
+    }
+    if (sg.kind === 'home') [72, 76, 79, 84].forEach((n, i) => blip(c, end + i * 0.06, NOTE(n), 0.06, 0.045));
+    else blip(c, end, NOTE(60), 0.05, 0.04, 'square', NOTE(48));
+  }
+  plan.kills.forEach((k, i) => {
+    const at = ms(k.delay);
+    crunch(c, at, 0.28);
+    blip(c, at + 0.02, NOTE(84), plan.killMs / 1000, 0.045, 'square', NOTE(36)); // wegvliegen: dalende sweep
+    if (me === null || i > 0) return;
+    const team = (x: number) => x % 2;
+    if (k.color === me) [67, 66, 65, 64, 63, 62].forEach((n, j) => blip(c, at + 0.2 + j * 0.09, NOTE(n), 0.08, 0.04, 'triangle'));
+    else if (last.by === me || (team(last.by) === team(me) && team(k.color) !== team(me))) {
+      [72, 76, 79, 84, 88].forEach((n, j) => blip(c, at + 0.15 + j * 0.055, NOTE(n), 0.05, 0.04));
+    }
+  });
+}
+
+function retroTurn() {
+  const c = ready();
+  if (!c) return;
+  const t = c.currentTime + 0.02;
+  blip(c, t, NOTE(79), 0.06, 0.03, 'triangle'); blip(c, t + 0.08, NOTE(84), 0.08, 0.03, 'triangle');
+}
+
+function retroWin(won: boolean) {
+  const c = ready();
+  if (!c) return;
+  const t = c.currentTime + 0.05;
+  // eigen 8-bit deuntje: [noot, lengte in tellen]
+  const tune: [number, number][] = won
+    ? [[67, 1], [72, 1], [76, 1], [79, 2], [76, 1], [79, 4], [0, 1], [81, 1], [79, 1], [76, 1], [84, 6]]
+    : [[72, 2], [71, 2], [70, 2], [69, 6]];
+  const beat = 0.09;
+  let at = t;
+  for (const [n, len] of tune) {
+    if (n) { blip(c, at, NOTE(n), len * beat * 0.92, 0.045); blip(c, at, NOTE(n - 12), len * beat * 0.92, 0.03, 'triangle'); }
+    at += len * beat;
+  }
+}
+
+function retroDeal(cards: number, gapMs: number, shuffleMs: number) {
+  const c = ready();
+  if (!c) return;
+  const t = c.currentTime + 0.02;
+  for (let i = 0; i < 8; i++) blip(c, t + i * (shuffleMs / 1000 / 9), NOTE(60 + (i % 2) * 7), 0.03, 0.025);
+  for (let k = 0; k < cards; k++) blip(c, t + shuffleMs / 1000 + (k * gapMs) / 1000, NOTE(88 + (k % 4)), 0.015, 0.02);
 }

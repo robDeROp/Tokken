@@ -343,6 +343,8 @@ export const AI_PERSONAS: Persona[] = [
   { level: 8, name: BOT_LEVEL_NAME[8].nl, slip: 0, slipCost: 0, smartDiscard: true },
   // Bompa Fons: denkt de 6 beste zetten door in 12 mogelijke werelden (de kaarten die hij niet ziet)
   { level: 9, name: BOT_LEVEL_NAME[9].nl, slip: 0, slipCost: 0, smartDiscard: true, think: { top: 6, samples: 12 } },
+  // De Kloon: speelt zoals de echte spelers van Tokken (voorkeursmodel geleerd uit hun zetten in move_log)
+  { level: 10, name: BOT_LEVEL_NAME[10].nl, slip: 0, slipCost: 0, smartDiscard: false, human: { temp: 0.5 } },
 ];
 export const personaOf = (level: number): Persona | null => AI_PERSONAS.find((p) => p.level === level) ?? null;
 

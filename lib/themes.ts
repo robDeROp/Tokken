@@ -1,6 +1,6 @@
 // Bord- en tafelthema's. Elk thema zet CSS-variabelen op <html data-theme="...">; het bord (SVG) en de
 // tafel lezen die variabelen. De ploegkleuren van de knikkers blijven altijd dezelfde (die betekenen iets).
-export type ThemeId = 'klassiek' | 'walnoot' | 'nacht' | 'picknick' | 'strand' | 'winter';
+export type ThemeId = 'klassiek' | 'walnoot' | 'nacht' | 'picknick' | 'strand' | 'winter' | 'retro';
 
 export interface Theme {
   id: ThemeId;
@@ -16,6 +16,7 @@ export const THEMES: Theme[] = [
   { id: 'picknick', name: { nl: 'Picknick', en: 'Picnic' }, swatch: ['#a8552f', '#b8322a'] },
   { id: 'strand', name: { nl: 'Strand', en: 'Beach' }, swatch: ['#dccbae', '#0d4f56'] },
   { id: 'winter', name: { nl: 'Winter', en: 'Winter' }, swatch: ['#e1e8ee', '#123326'] },
+  { id: 'retro', name: { nl: 'Retro arcade', en: 'Retro arcade' }, swatch: ['#05060f', '#1b2cff'] },
 ];
 
 const KEY = 'tokken-theme';
@@ -37,3 +38,6 @@ export function onThemeChange(l: (t: ThemeId) => void) { listeners.add(l); retur
 
 /** Klein script in <head>: zet het gekozen thema vóór de eerste weergave (geen flits). */
 export const THEME_BOOT = `try{var t=localStorage.getItem('${KEY}');if(t)document.documentElement.dataset.theme=t}catch(e){}`;
+
+/** Huidig thema (voor het geluid: in Retro arcade klinkt alles als een oude spelcomputer). */
+export const currentTheme = (): string => (typeof document !== 'undefined' ? document.documentElement.dataset.theme ?? 'klassiek' : 'klassiek');

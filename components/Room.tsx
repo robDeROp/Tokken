@@ -11,7 +11,8 @@ import { useT, LangToggle } from '@/lib/i18n';
 import { BrandTag, MadeBy } from './Brand';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import Chat from './Chat';
-import SoundToggle, { SpeedPicker, MascotToggle, ThemePicker } from './SoundToggle';
+import SoundToggle, { SpeedPicker, MascotToggle } from './SoundToggle';
+import { ThemeButton, ThemeSheet } from './ThemeSheet';
 import { TokskeCommentator } from './Tokske';
 import { moveDuration, dealDuration, dealTiming, SHUFFLE_MS } from '@/lib/board';
 import { getSpeed } from '@/lib/prefs';
@@ -173,7 +174,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       <header className="top">
         <Link href="/" className="logo">Tokken</Link>
         <BrandTag />
-        <LangToggle />
+        <div className="top-right"><ThemeButton /><LangToggle /></div>
       </header>
       {children}
       <footer className="site-foot"><MadeBy /></footer>
@@ -296,6 +297,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
   const [askResign, setAskResign] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
   // nieuwe ronde (of nieuw spel): kaarten uitdelen met animatie
   const [dealRound, setDealRound] = useState<number | null>(null);
   const seenRound = useRef<number | null>(null);
@@ -529,7 +531,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           <label className="drawer-zoom">{t.zoom}<input aria-label={t.zoom} type="range" min="1" max="1.7" step="0.1" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
           <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle />{mascot && <MascotToggle />}</div>
           <div className="drawer-control drawer-speed"><span>{lang === 'nl' ? 'Snelheid' : 'Speed'}</span><SpeedPicker /></div>
-          <div className="drawer-control drawer-theme"><span>{lang === 'nl' ? 'Thema' : 'Theme'}</span><ThemePicker /></div>
+          <div className="drawer-control"><span>{lang === 'nl' ? 'Stijl' : 'Style'}</span>
+            <button className="btn small" onClick={() => { setShowTheme(true); setShowControls(false); }}>{lang === 'nl' ? 'Kies je stijl…' : 'Pick a style…'}</button></div>
           <MadeBy compact />
         </aside>
       </>}
@@ -635,6 +638,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           </div>
         </div>
       )}
+
+      {showTheme && <ThemeSheet onClose={() => setShowTheme(false)} />}
 
       {askResign && pub.winner === null && (
         <div className="overlay" onClick={() => setAskResign(false)}>

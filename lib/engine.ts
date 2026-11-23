@@ -780,11 +780,11 @@ export function botActionSimple(st: State, c: Color, rng: () => number = Math.ra
 
 // ---------- niveaus ----------
 /** 1–5: robots met vaste regels (hieronder). 6–9: AI's die leerden door zelf te spelen (lib/ai.ts). */
-export type BotLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9;
+export type BotLevel = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
 export const ROBOT_LEVELS: BotLevel[] = [1, 2, 3, 4, 5];
-export const AI_LEVELS: BotLevel[] = [6, 7, 8, 9];
+export const AI_LEVELS: BotLevel[] = [6, 7, 8, 9, 10];
 export const BOT_LEVELS: BotLevel[] = [...ROBOT_LEVELS, ...AI_LEVELS];
-export const isAiLevel = (l: number) => l >= 6 && l <= 9;
+export const isAiLevel = (l: number) => l >= 6 && l <= 10;
 export const BOT_LEVEL_NAME: Record<BotLevel, { nl: string; en: string }> = {
   1: { nl: 'Beginner', en: 'Beginner' },
   2: { nl: 'Makkelijk', en: 'Easy' },
@@ -795,11 +795,12 @@ export const BOT_LEVEL_NAME: Record<BotLevel, { nl: string; en: string }> = {
   7: { nl: 'Mia', en: 'Mia' },
   8: { nl: 'Staf', en: 'Staf' },
   9: { nl: 'Bompa Fons', en: 'Grandpa Fons' },
+  10: { nl: 'De Kloon', en: 'The Clone' },
 };
 /** Vaste Elo per niveau, gemeten met scripts/level-tournament.ts (Gemiddeld = 1000 = startrating van een mens). */
 // Gemeten (winstkans ploeg A tegen ploeg B): 2-1 81%, 3-2 86%, 3-1 96%, 4-3 68%, 5-4 61%, 5-3 76%.
 // AI (zelfde Expert = 1210): Jules 38%, Mia 58%, Staf 61%, Bompa Fons 74% tegen Expert (scripts/ai-train/arena.ts).
-export const BOT_RATING: Record<BotLevel, number> = { 1: 450, 2: 700, 3: 1000, 4: 1130, 5: 1210, 6: 1120, 7: 1260, 8: 1290, 9: 1390 };
+export const BOT_RATING: Record<BotLevel, number> = { 1: 450, 2: 700, 3: 1000, 4: 1130, 5: 1210, 6: 1150, 7: 1290, 8: 1320, 9: 1420, 10: 1110 };
 export const DEFAULT_LEVEL: BotLevel = 3;
 export const asLevel = (x: unknown, fallback: BotLevel = DEFAULT_LEVEL): BotLevel =>
   (BOT_LEVELS.includes(Number(x) as BotLevel) ? Number(x) : fallback) as BotLevel;
@@ -828,7 +829,7 @@ function legalPlays(st: State, c: Color): Action[] {
 }
 
 /** Kans op een willekeurige (vaak slechte) zet per niveau. */
-const RANDOM_MOVE: Record<BotLevel, number> = { 1: 0.5, 2: 0.3, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+const RANDOM_MOVE: Record<BotLevel, number> = { 1: 0.5, 2: 0.3, 3: 0, 4: 0, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0, 10: 0 };
 
 /** De robot op een bepaald niveau (6+ = AI: zie botMove in lib/ai.ts; hier valt die terug op Expert). */
 export function botActionLevel(st: State, c: Color, level: BotLevel = 5, rng: () => number = Math.random): Action {
