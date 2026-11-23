@@ -35,7 +35,7 @@ const epiano: Voice = (g, bus, at, m, dur, vol) => {
   const e = env(g.c, at, vol, 0.008, dur * 0.3, dur * 0.9 + 0.3);
   osc(g, bus, at, 'sine', f, e, at + dur + 1.4, undefined, 0.35);
   const e2 = env(g.c, at, vol * 0.28, 0.004, 0, 0.35);
-  osc(g, bus, at, 'sine', f * 2.01, e2, at + 0.5);
+  osc(g, bus, at, 'sine', f * 2, e2, at + 0.5);
 };
 /** marimba / houten klankstaaf */
 const marimba: Voice = (g, bus, at, m, _dur, vol) => {
@@ -49,6 +49,33 @@ const bell: Voice = (g, bus, at, m, _dur, vol) => {
   osc(g, bus, at, 'sine', f, env(g.c, at, vol, 0.002, 0, 1.6), at + 1.8, undefined, 0.5);
   osc(g, bus, at, 'sine', f * 2.76, env(g.c, at, vol * 0.35, 0.002, 0, 0.5), at + 0.6, undefined, 0.4);
   osc(g, bus, at, 'sine', f * 5.4, env(g.c, at, vol * 0.12, 0.001, 0, 0.18), at + 0.25);
+};
+/** speeldoos / celesta: zuivere boventonen (octaaf, kwint erboven), kort en helder */
+const musicbox: Voice = (g, bus, at, m, _dur, vol) => {
+  const f = hz(m);
+  osc(g, bus, at, 'sine', f, env(g.c, at, vol, 0.002, 0, 1.1), at + 1.3, undefined, 0.35);
+  osc(g, bus, at, 'sine', f * 2, env(g.c, at, vol * 0.3, 0.002, 0, 0.35), at + 0.5, undefined, 0.2);
+  osc(g, bus, at, 'sine', f * 3, env(g.c, at, vol * 0.08, 0.001, 0, 0.12), at + 0.2);
+};
+/** glas / zachte klok voor ambient: zuiver, trage aanzet */
+const glass: Voice = (g, bus, at, m, dur, vol) => {
+  const f = hz(m);
+  osc(g, bus, at, 'sine', f, env(g.c, at, vol, 0.06, dur * 0.3, 2.2), at + dur + 2.6, undefined, 0.6);
+  osc(g, bus, at, 'sine', f * 2, env(g.c, at, vol * 0.18, 0.05, 0, 1.0), at + 1.3, undefined, 0.4);
+};
+/** vibrafoon: zuiver met trage tremolo */
+const vibes: Voice = (g, bus, at, m, dur, vol) => {
+  const f = hz(m);
+  const e = env(g.c, at, vol, 0.004, dur * 0.2, 1.2);
+  const trem = g.c.createOscillator(); trem.frequency.value = 5; const tg = g.c.createGain(); tg.gain.value = vol * 0.25;
+  trem.connect(tg); tg.connect(e.gain);
+  osc(g, bus, at, 'sine', f, e, at + dur + 1.5, undefined, 0.35);
+  osc(g, bus, at, 'sine', f * 4, env(g.c, at, vol * 0.12, 0.002, 0, 0.08), at + 0.12);
+  trem.start(at); trem.stop(at + dur + 1.5);
+};
+/** zachte sinusbas */
+const softbass: Voice = (g, bus, at, m, dur, vol) => {
+  osc(g, bus, at, 'sine', hz(m), env(g.c, at, vol, 0.01, dur * 0.6, 0.35), at + dur + 0.5);
 };
 /** getokkelde snaar (ukelele, gitaar) */
 const pluck: Voice = (g, bus, at, m, dur, vol) => {
@@ -66,7 +93,7 @@ const steel: Voice = (g, bus, at, m, _dur, vol) => {
   o.connect(e); e.connect(bus); const s = g.c.createGain(); s.gain.value = 0.25; e.connect(s); s.connect(g.wet);
   o.start(at); o.stop(at + 0.7);
   osc(g, bus, at, 'sine', f * 2, env(g.c, at, vol * 0.45, 0.002, 0, 0.3), at + 0.4);
-  osc(g, bus, at, 'sine', f * 3.01, env(g.c, at, vol * 0.18, 0.002, 0, 0.15), at + 0.2);
+  osc(g, bus, at, 'sine', f * 3, env(g.c, at, vol * 0.18, 0.002, 0, 0.15), at + 0.2);
 };
 /** fluitje (met vibrato) */
 const whistle: Voice = (g, bus, at, m, dur, vol) => {
@@ -81,9 +108,9 @@ const whistle: Voice = (g, bus, at, m, dur, vol) => {
 /** zachte strijkers / klankwolk */
 const pad: Voice = (g, bus, at, m, dur, vol) => {
   const f = hz(m);
-  for (const d of [-6, 6]) {
-    const filt = lp(g.c, 900);
-    const o = g.c.createOscillator(); o.type = 'sawtooth'; o.frequency.value = f; o.detune.value = d;
+  for (const [d, type] of [[-3, 'sawtooth'], [3, 'triangle']] as const) {
+    const filt = lp(g.c, 800);
+    const o = g.c.createOscillator(); o.type = type; o.frequency.value = f; o.detune.value = d;
     const e = env(g.c, at, vol * 0.5, Math.min(0.9, dur * 0.4), dur * 0.4, 1.2);
     o.connect(filt); filt.connect(e); e.connect(bus); const s = g.c.createGain(); s.gain.value = 0.6; e.connect(s); s.connect(g.wet);
     o.start(at); o.stop(at + dur + 2.2);
@@ -137,7 +164,7 @@ interface Style {
   scale: number[];               // toonladder voor de melodie (MIDI, al in de juiste octaaf)
   comp: { voice: Voice; steps: number[]; vol: number; strum?: number; up?: number };
   bass: { voice: Voice; steps: number[]; vol: number; walk?: boolean; octave?: number };
-  lead: { voice: Voice; vol: number; density: number; grid: 1 | 2; maxLen: number };
+  lead: { voice: Voice; vol: number; density: number; grid: 1 | 2 | 4; maxLen: number };
   arp?: { voice: Voice; vol: number; every: 1 | 2 };
   drums: [Drum, number[], number][];   // soort, stappen (0..15), volume
 }
@@ -147,26 +174,26 @@ const pent = (root: number, minor: boolean) => {
 };
 
 const STYLES: Record<string, Style> = {
-  klassiek: { bpm: 84, swing: 0.12,
-    chords: [[65, 69, 72, 76], [62, 65, 69, 72], [67, 70, 74, 77], [60, 64, 67, 70]],
+  klassiek: { bpm: 88, swing: 0,
+    chords: [[65, 69, 72, 74], [62, 65, 69, 72], [67, 70, 74, 77], [60, 64, 67, 70]],
     scale: pent(72, false),
-    comp: { voice: epiano, steps: [0, 6, 10], vol: 0.05 },
-    bass: { voice: bass, steps: [0, 8, 12], vol: 0.11, octave: -24 },
-    lead: { voice: marimba, vol: 0.09, density: 0.38, grid: 2, maxLen: 4 },
-    drums: [['brush', [4, 12], 0.05], ['shaker', [2, 6, 10, 14], 0.025]] },
-  walnoot: { bpm: 72, swing: 0.18,
-    chords: [[62, 65, 69, 72, 76], [55, 65, 71, 76], [60, 64, 67, 71, 74], [57, 61, 64, 67, 70]],
+    comp: { voice: epiano, steps: [0, 8], vol: 0.045 },
+    bass: { voice: bass, steps: [0, 8], vol: 0.11, octave: -24 },
+    lead: { voice: marimba, vol: 0.09, density: 0.36, grid: 2, maxLen: 4 },
+    drums: [['brush', [4, 12], 0.045], ['shaker', [0, 4, 8, 12], 0.02]] },
+  walnoot: { bpm: 76, swing: 0,
+    chords: [[62, 65, 69, 72], [55, 59, 62, 65], [60, 64, 67, 69], [57, 61, 64, 67]],
     scale: [62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79],
-    comp: { voice: epiano, steps: [0, 7, 11], vol: 0.045 },
-    bass: { voice: bass, steps: [0, 4, 8, 12], vol: 0.12, walk: true, octave: -24 },
-    lead: { voice: bell, vol: 0.05, density: 0.22, grid: 2, maxLen: 6 },
-    drums: [['ride', [0, 4, 6, 8, 12, 14], 0.018], ['brush', [4, 12], 0.04]] },
+    comp: { voice: epiano, steps: [0, 8], vol: 0.04 },
+    bass: { voice: bass, steps: [0, 4, 8, 12], vol: 0.11, walk: true, octave: -24 },
+    lead: { voice: vibes, vol: 0.05, density: 0.32, grid: 4, maxLen: 8 },
+    drums: [['ride', [0, 4, 8, 12], 0.014], ['brush', [4, 12], 0.035]] },
   nacht: { bpm: 56, swing: 0,
-    chords: [[57, 60, 64, 71], [53, 57, 60, 64], [55, 60, 64, 67], [55, 59, 62, 64]],
+    chords: [[57, 60, 64, 69], [53, 57, 60, 65], [55, 60, 64, 67], [55, 59, 62, 67]],
     scale: pent(69, true).map((x) => x + 12),
-    comp: { voice: pad, steps: [0], vol: 0.06 },
-    bass: { voice: bass, steps: [0], vol: 0.09, octave: -24 },
-    lead: { voice: bell, vol: 0.045, density: 0.16, grid: 2, maxLen: 8 },
+    comp: { voice: pad, steps: [0], vol: 0.085 },
+    bass: { voice: softbass, steps: [0], vol: 0.13, octave: -24 },
+    lead: { voice: glass, vol: 0.085, density: 0.3, grid: 4, maxLen: 8 },
     drums: [] },
   picknick: { bpm: 112, swing: 0.06,
     chords: [[60, 64, 67, 72], [55, 59, 62, 67], [57, 60, 64, 69], [53, 57, 60, 65]],
@@ -182,13 +209,13 @@ const STYLES: Record<string, Style> = {
     bass: { voice: bass, steps: [0, 3, 8, 11], vol: 0.11, octave: -24 },
     lead: { voice: steel, vol: 0.07, density: 0.42, grid: 1, maxLen: 3 },
     drums: [['shaker', [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], 0.012], ['kick', [0, 8], 0.08]] },
-  winter: { bpm: 80, swing: 0,
+  winter: { bpm: 84, swing: 0,
     chords: [[62, 66, 69, 74], [59, 62, 66, 71], [55, 59, 62, 67], [57, 61, 64, 69]],
-    scale: [74, 76, 78, 79, 81, 83, 85, 86, 88, 90],
-    comp: { voice: pad, steps: [0], vol: 0.035 },
-    bass: { voice: bell, steps: [0, 8], vol: 0.05, octave: -24 },
-    lead: { voice: bell, vol: 0.06, density: 0.45, grid: 2, maxLen: 4 },
-    drums: [['sleigh', [0, 4, 8, 12], 0.02]] },
+    scale: [74, 76, 78, 79, 81, 83, 85, 86, 88, 90, 91, 93],
+    comp: { voice: pad, steps: [0], vol: 0.05 },
+    bass: { voice: softbass, steps: [0, 8], vol: 0.12, octave: -24 },
+    lead: { voice: musicbox, vol: 0.115, density: 0.42, grid: 2, maxLen: 4 },
+    drums: [['sleigh', [0, 4, 8, 12], 0.026]] },
   retro: { bpm: 132, swing: 0,
     chords: [[57, 60, 64], [53, 57, 60], [60, 64, 67], [55, 59, 62]],
     scale: pent(69, true),
@@ -205,11 +232,14 @@ function seeded(str: string) {
   return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 type Note = { step: number; midi: number; len: number };
+/** Botst een noot met het akkoord? (een halve toon naast een akkoordtoon klinkt vals) */
+export const clashes = (m: number, chord: number[]) => chord.some((c) => { const d = (((m - c) % 12) + 12) % 12; return d === 1 || d === 11; });
+/** Noten van de ladder die bij dit akkoord passen. */
+const fits = (scale: number[], chord: number[]) => { const ok = scale.filter((m) => !clashes(m, chord)); return ok.length ? ok : scale; };
 /** Een melodie van 8 maten (2x de akkoordreeks): deel A en een variatie A' met hetzelfde ritme. */
-function compose(id: string, st: Style): Note[] {
+export function compose(id: string, st: Style): Note[] {
   const rnd = seeded('tokken-' + id);
   const out: Note[] = [];
-  const nearest = (m: number) => st.scale.reduce((b, x) => (Math.abs(x - m) < Math.abs(b - m) ? x : b), st.scale[0]);
   const rhythm: number[][] = [];
   for (let bar = 0; bar < 4; bar++) {
     const steps: number[] = [];
@@ -225,18 +255,20 @@ function compose(id: string, st: Style): Note[] {
     for (let bar = 0; bar < 4; bar++) {
       const chord = st.chords[bar];
       const steps = rhythm[bar];
+      // per maat enkel noten die bij het akkoord passen; op de sterke tellen een echte akkoordtoon
+      const ok = fits(st.scale, chord);
+      const chordTones = ok.filter((m) => chord.some((c) => (((m - c) % 12) + 12) % 12 === 0));
+      const nearestIn = (list: number[], m: number) => list.reduce((b, x) => (Math.abs(x - m) < Math.abs(b - m) ? x : b), list[0]);
       steps.forEach((s, i) => {
         const next = i + 1 < steps.length ? steps[i + 1] : 16;
         let target: number;
-        if (s % 8 === 0) {
-          // sterke tel: een akkoordtoon in de buurt
-          const tones = chord.flatMap((n) => [n, n + 12, n + 24]).map(nearest);
-          target = tones.reduce((b, x) => (Math.abs(x - cur) < Math.abs(b - cur) ? x : b), tones[0]);
-          if (half === 1 && bar === 3 && i === 0) target = nearest(chord[0] + 12);
+        if (s % 8 === 0 && chordTones.length) {
+          target = nearestIn(chordTones, cur);
+          if (half === 1 && bar === 3 && i === 0) target = nearestIn(chordTones, chord[0] + 12);
         } else {
-          const idx = st.scale.indexOf(nearest(cur));
+          const idx = ok.indexOf(nearestIn(ok, cur));
           const move = [-2, -1, -1, 1, 1, 2][Math.floor(rnd() * 6)] * (half === 1 && rnd() < 0.5 ? -1 : 1);
-          target = st.scale[Math.min(st.scale.length - 1, Math.max(0, idx + move))];
+          target = ok[Math.min(ok.length - 1, Math.max(0, idx + move))];
         }
         cur = target;
         out.push({ step: half * 64 + bar * 16 + s, midi: target, len: Math.min(st.lead.maxLen, next - s) });
@@ -245,6 +277,25 @@ function compose(id: string, st: Style): Note[] {
   }
   return out;
 }
+
+/** Basnoot: altijd een toon uit het akkoord (grondtoon, kwint, terts of octaaf). */
+export function bassNote(st: Style, bar: number, beat: number): number {
+  const chord = st.chords[bar];
+  const root = chord[0] + (st.bass.octave ?? -24);
+  const tone = (iv: number[]) => {
+    for (const x of iv) if (chord.some((c) => (((c - chord[0]) % 12) + 12) % 12 === x)) return root + x;
+    return root + 12;
+  };
+  if (st.bass.walk) {
+    const k = st.bass.steps.indexOf(beat) % 4;
+    return [root, tone([3, 4]), tone([7]), root + 12][k];
+  }
+  if (st.bass.voice === tri) return beat % 4 === 2 ? root + 12 : root;
+  if (beat === 0) return root;
+  return beat % 8 === 0 ? tone([7]) : root + 12;
+}
+
+export { STYLES };
 
 // ---------- planner ----------
 interface Session { id: string; st: Style; mel: Map<number, Note>; bus: GainNode; step: number; next: number; timer: ReturnType<typeof setInterval> | null }
@@ -274,12 +325,7 @@ function schedule(s: Session, g: Graph) {
     }
     // bas
     if (st.bass.steps.includes(beat)) {
-      const root = chord[0] + (st.bass.octave ?? -24);
-      let m = root;
-      if (st.bass.walk) m = [root, root + 4, root + 7, root + 10][st.bass.steps.indexOf(beat) % 4] - (beat === 12 ? 1 : 0);
-      else if (st.bass.voice === tri) m = beat % 4 === 2 ? root + 12 : root;
-      else if (beat !== 0) m = beat % 8 === 0 ? root + 7 : root + 12;
-      st.bass.voice(g, s.bus, at, m, sixteenth * (st.bass.voice === tri ? 1.8 : 3), st.bass.vol);
+      st.bass.voice(g, s.bus, at, bassNote(st, bar, beat), sixteenth * (st.bass.voice === tri ? 1.8 : 3), st.bass.vol);
     }
     // melodie
     const n = s.mel.get(step);
