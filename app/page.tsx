@@ -10,9 +10,10 @@ import Leaderboard from '@/components/Leaderboard';
 import { BrandTag, MadeBy } from '@/components/Brand';
 import { COLOR_HEX } from '@/components/Board';
 import { TokskeHero } from '@/components/Tokske';
+import { ThemePicker } from '@/components/SoundToggle';
 
 export default function Home() {
-  const { t } = useT();
+  const { t, lang } = useT();
   const router = useRouter();
   const [name, setN] = useState('');
   const [code, setCode] = useState('');
@@ -136,6 +137,11 @@ export default function Home() {
       <Leaderboard userId={user?.id ?? null} />
 
       <Scoreboard />
+
+      <section className="panel home-themes">
+        <h2>{lang === 'nl' ? 'Kies je bord' : 'Pick your board'}</h2>
+        <ThemePicker />
+      </section>
 
       <section className="panel rules-home">
         <h2>{t.rules}</h2>

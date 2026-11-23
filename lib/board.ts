@@ -134,7 +134,7 @@ export function planMove(last: LastMove, pieces: Piece[], prev: Piece[] | null, 
     const from = was && was.t !== 'kot' ? posXY(was, c, 0) : lastSeg ? lastSeg.pts[lastSeg.pts.length - 1] : null;
     kills.push({ piece: id, color: c, from, at: kotXY(c, Math.min(3, slotNow(id))), delay: t - 30 });
   }
-  const total = t + (kills.length ? T.kill : 0);
+  const total = t + (kills.length ? 80 + Math.round(T.kill * 1.5) : 0); // hit-stop + vlucht + nastuiteren
   return { segs, kills, total, killMs: T.kill, hop: hops(speed) };
 }
 

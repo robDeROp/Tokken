@@ -4,6 +4,7 @@ import '@fontsource/kalam/400.css';
 import '@fontsource/kalam/700.css';
 import { LangProvider } from '@/lib/i18n';
 import './globals.css';
+import { THEME_BOOT } from '@/lib/themes';
 
 
 export const metadata: Metadata = {
@@ -18,7 +19,8 @@ export const viewport: Viewport = { width: 'device-width', initialScale: 1, them
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="nl">
+    <html lang="nl" suppressHydrationWarning>
+      <head><script dangerouslySetInnerHTML={{ __html: THEME_BOOT }} /></head>
       <body><LangProvider>{children}</LangProvider></body>
     </html>
   );

@@ -7,20 +7,37 @@ import { mulberry } from './util.ts';
 
 type Player = (st: State, c: Color, rng: () => number) => Action;
 const nets = new Map<string, Net>();
+function loadNet(file?: string): Net {
+  const path = file || process.env.NET || '/home/claude/train/net_cur.json';
+  if (!nets.has(path)) nets.set(path, JSON.parse(readFileSync(path, 'utf8')));
+  return nets.get(path)!;
+}
 export function player(spec: string): Player {
   if (spec.startsWith('L')) { const l = Number(spec.slice(1)) as BotLevel; return (st, c, rng) => botActionLevel(st, c, l, rng); }
+  if (spec.startsWith('hum:')) {
+    // speelt zoals de mensen: hum:<temp>[:net.json]
+    const [, temp, file] = spec.split(':');
+    const net = loadNet(file);
+    const persona = { level: 9 as BotLevel, name: 'mens', slip: 0, slipCost: 0, smartDiscard: false, human: { temp: Number(temp) } };
+    return (st, c, rng) => aiAction(st, c, persona, rng, net);
+  }
   const [, temp, smart, think, file] = spec.split(':');
-  const path = file || process.env.NET || '/home/claude/train/net.json';
-  const th = think && think !== '0' ? { top: Number(think.split('x')[0]), samples: Number(think.split('x')[1]) } : undefined;
-  if (!nets.has(path)) nets.set(path, JSON.parse(readFileSync(path, 'utf8')));
-  const net = nets.get(path)!;
+  // think = <top>x<samples>[h]  (h: verwacht dat de anderen spelen zoals mensen)
+  const th = think && think !== '0' ? { top: Number(think.split('x')[0]), samples: parseInt(think.split('x')[1]), humanOpp: think.endsWith('h') } : undefined;
+  const net = loadNet(file);
   const [slip, cost] = temp.split('/').map(Number);
   const persona = { level: 9 as BotLevel, name: 'x', slip, slipCost: cost || 0.015, smartDiscard: smart === '1', think: th };
   return (st, c, rng) => aiAction(st, c, persona, rng, net);
 }
 
+/** Een ploeg: één spec voor beide spelers, of "X+Y" voor speler 1 en zijn ploegmaat. */
+function team(spec: string): [Player, Player] {
+  const [x, y] = spec.split('+');
+  const px = player(x);
+  return [px, y ? player(y) : px];
+}
 export function arena(a: string, b: string, n: number, seed = 1) {
-  const pa = player(a), pb = player(b);
+  const ta = team(a), tb = team(b);
   let winsA = 0, moves = 0;
   const teamKills = [0, 0], oppKills = [0, 0], d1 = [0, 0], dAll = [0, 0];
   for (let g = 0; g < n; g++) {
@@ -31,7 +48,8 @@ export function arena(a: string, b: string, n: number, seed = 1) {
     while (st.winner === null && guard++ < 8000) {
       const c = st.turn as Color;
       const isA = teamOf(c) === teamA ? 0 : 1;
-      const act = (isA === 0 ? pa : pb)(st, c, rng);
+      // de eerste speler van een ploeg zit op stoel 0 of 1, zijn ploegmaat op stoel 2 of 3
+      const act = (isA === 0 ? ta : tb)[c >= 2 ? 1 : 0](st, c, rng);
       applyAction(st, c, act);
       const last = st.last;
       if (act.type === 'discardOne') d1[isA]++;

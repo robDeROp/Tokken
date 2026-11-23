@@ -8,6 +8,7 @@ import {
   type State, type Piece, type Color, type Card, type Rank, type Action, type Team, type BotLevel,
 } from './engine.ts';
 import { AI_NET } from './ai-weights.ts';
+import { humanProbs, sampleIndex } from './human.ts';
 
 // ---------- wat de AI "ziet" na een zet ----------
 /** Stand direct na een zet, met enkel wat de speler zelf mag weten. */
@@ -197,12 +198,17 @@ function viewOfState(st: State, x: Color): View {
 }
 
 /** Snelle zet voor de anderen in een gedachte wereld: beste zet volgens het netwerk. */
-function quickMove(st: State, x: Color, rng: () => number, net: Net | null): Action {
+function quickMove(st: State, x: Color, rng: () => number, net: Net | null, human = false): Action {
   if (needsFreeExit(st.pieces, x, st.sticks[x], st.freeExitDone, st.hands[x])) {
     return { type: 'freeExit', piece: st.pieces.find((p) => p.color === x && p.pos.t === 'kot')!.id };
   }
   const cands = candidates(st, x, rng, 25).filter((cd) => cd.a.type !== 'discardAll' || st.hands[x].length <= 1);
   if (!cands.length) return { type: 'discardAll' };
+  if (human && cands.length > 1) {
+    // de anderen spelen zoals echte spelers: trek een zet volgens het voorkeursmodel
+    const vals = cands.map((cd) => valueOf(cd.view, x, net));
+    return cands[sampleIndex(humanProbs(st, x, cands, vals), rng)].a;
+  }
   return chooseAction(cands, x, 0, rng, net);
 }
 
@@ -210,14 +216,14 @@ function seeded(a: number) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; le
 
 /** Speel na actie a de beurten van de anderen tot ik weer aan de beurt ben; winstkans voor mijn ploeg.
  *  Elke kandidaat wordt in dezelfde gedachte werelden gespeeld (zelfde seed), zodat enkel de zet het verschil maakt. */
-function lookahead(st: State, c: Color, a: Action, seed: number, net: Net | null): number {
+function lookahead(st: State, c: Color, a: Action, seed: number, net: Net | null, humanOpp = false): number {
   const rng = seeded(seed);
   const w = sampleWorld(st, c, rng);
   try { applyAction(w, c, a); } catch { return 0; }
   let last: Color = c;
   for (let guard = 0; guard < 8 && w.winner === null && w.turn !== c; guard++) {
     const x = w.turn;
-    try { applyAction(w, x, quickMove(w, x, rng, net)); } catch { break; }
+    try { applyAction(w, x, quickMove(w, x, rng, net, humanOpp)); } catch { break; }
     last = x;
     // gratis buitenkomen telt niet als beurt: dezelfde speler speelt verder
   }
@@ -255,7 +261,9 @@ export interface Persona {
   /** één per één afgooien en kaarten bijhouden voor als je ploegmaat je buitenspeelt */
   smartDiscard: boolean;
   /** vooruitdenken: de beste `top` zetten elk in `samples` mogelijke werelden doorspelen */
-  think?: { top: number; samples: number };
+  think?: { top: number; samples: number; humanOpp?: boolean };
+  /** speelt zoals de echte spelers (voorkeursmodel uit move_log); temp > 1 = losser, < 1 = scherper */
+  human?: { temp: number };
 }
 
 /** Hoeveel pionnen van de eigen ploeg (buiten de speler zelf geteld als ploeg) deze zet naar hun kot stuurt. */
@@ -310,13 +318,17 @@ export function aiAction(st: State, c: Color, persona: Persona, rng: () => numbe
       const seeds = Array.from({ length: persona.think.samples }, () => Math.floor(rng() * 2 ** 31));
       for (const t of top) {
         let sum = 0;
-        for (const seed of seeds) sum += lookahead(st, c, t.cd.a, seed, net);
+        for (const seed of seeds) sum += lookahead(st, c, t.cd.a, seed, net, !!persona.think!.humanOpp);
         // half de gedachte toekomst, half de eerste indruk
         t.v = 0.5 * t.v + 0.5 * (sum / seeds.length - TEAM_KILL_PENALTY * teamKills(st.pieces, t.cd.view.pieces, c));
       }
       top.sort((x, y) => y.v - x.v);
       return top[0].cd.a;
     }
+  }
+  if (persona.human && cands.length > 1) {
+    const vals = cands.map((cd) => valueOf(cd.view, c, net));
+    return cands[sampleIndex(humanProbs(st, c, cands, vals, undefined, persona.human.temp), rng)].a;
   }
   return chooseAction(cands, c, persona.slip, rng, net, st.pieces, persona.slipCost);
 }

@@ -11,7 +11,7 @@ import { useT, LangToggle } from '@/lib/i18n';
 import { BrandTag, MadeBy } from './Brand';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import Chat from './Chat';
-import SoundToggle, { SpeedPicker, MascotToggle } from './SoundToggle';
+import SoundToggle, { SpeedPicker, MascotToggle, ThemePicker } from './SoundToggle';
 import { TokskeCommentator } from './Tokske';
 import { moveDuration, dealDuration, dealTiming, SHUFFLE_MS } from '@/lib/board';
 import { getSpeed } from '@/lib/prefs';
@@ -276,7 +276,10 @@ const lastLogNumber = (pub: PublicState) => pub.log.at(-1)?.n ?? -1;
 
 type Step = { piece: number; to: Pos };
 
-export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken, mascot, rating, rematchLabel }: {
+export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, chatToken, mascot, rating, rematchLabel, onResign, resigned }: {
+  /** oefenen: opgeven (telt als verlies) */
+  onResign?: () => void;
+  resigned?: boolean;
   chatToken?: string;
   /** Rating-aanpassing na afloop (null = niet tonen) */
   rating?: RatingInfo | null;
@@ -292,6 +295,7 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const hand = useMemo(() => (me?.hand ?? []).slice().sort((a, b) => RANK_ORDER.indexOf(a.rank) - RANK_ORDER.indexOf(b.rank) || a.suit.localeCompare(b.suit)), [me?.hand]);
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
+  const [askResign, setAskResign] = useState(false);
   // nieuwe ronde (of nieuw spel): kaarten uitdelen met animatie
   const [dealRound, setDealRound] = useState<number | null>(null);
   const seenRound = useRef<number | null>(null);
@@ -516,10 +520,16 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           </div>
           <p className="drawer-meta">{t.modes[mode]} · {t.round} {pub.round} · {pub.moveNo} {lang === 'nl' ? 'zetten' : 'moves'}</p>
           <button className="btn drawer-rules" onClick={() => { setShowRules(true); setShowControls(false); }}>{t.rules}</button>
+          {onResign && pub.winner === null && (
+            <button className="btn ghost drawer-resign" onClick={() => { setAskResign(true); setShowControls(false); }}>
+              <span aria-hidden="true">🏳</span> {lang === 'nl' ? 'Opgeven' : 'Resign'}
+            </button>
+          )}
           <div className="drawer-control"><span>{lang === 'nl' ? 'Taal' : 'Language'}</span><LangToggle /></div>
           <label className="drawer-zoom">{t.zoom}<input aria-label={t.zoom} type="range" min="1" max="1.7" step="0.1" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
           <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle />{mascot && <MascotToggle />}</div>
           <div className="drawer-control drawer-speed"><span>{lang === 'nl' ? 'Snelheid' : 'Speed'}</span><SpeedPicker /></div>
+          <div className="drawer-control drawer-theme"><span>{lang === 'nl' ? 'Thema' : 'Theme'}</span><ThemePicker /></div>
           <MadeBy compact />
         </aside>
       </>}
@@ -614,13 +624,29 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
       {pub.winner !== null && (
         <div className="overlay">
           <div className="panel narrow win">
-            <h1 className="h-hand">{t.win(t.teamNames[pub.winner])}</h1>
+            <h1 className="h-hand">{resigned ? (lang === 'nl' ? 'Opgegeven' : 'You resigned') : t.win(t.teamNames[pub.winner])}</h1>
+            {resigned && <p className="muted">{lang === 'nl' ? 'De computers winnen dit spel.' : 'The computers win this game.'}</p>}
             <div className="win-dots">
               {[pub.winner, pub.winner + 2].map((c) => <span key={c} className="dot big" style={{ ['--c' as string]: COLOR_HEX[c] }} />)}
             </div>
             {seat !== null && pub.homeBy && <p className="home-line">{t.homeLine(pub.homeBy[seat] ?? 0, pub.homeBy[(seat + 2) % 4] ?? 0)}</p>}
             {rating && <RatingResult r={rating} />}
             {isHost && <button className="btn primary" onClick={() => call({ op: 'rematch' })}>{rematchLabel ?? t.rematch}</button>}
+          </div>
+        </div>
+      )}
+
+      {askResign && pub.winner === null && (
+        <div className="overlay" onClick={() => setAskResign(false)}>
+          <div className="panel narrow resign-ask" role="dialog" aria-modal="true" aria-labelledby="resign-title" onClick={(e) => e.stopPropagation()}>
+            <h2 id="resign-title" className="h-hand">{lang === 'nl' ? 'Opgeven?' : 'Resign?'}</h2>
+            <p>{lang === 'nl'
+              ? 'De computers winnen dan dit spel. Het telt als verlies voor je rating (als het spel al lang genoeg bezig is).'
+              : 'The computers then win this game. It counts as a loss for your rating (if the game has run long enough).'}</p>
+            <div className="resign-buttons">
+              <button className="btn" autoFocus onClick={() => setAskResign(false)}>{lang === 'nl' ? 'Verder spelen' : 'Keep playing'}</button>
+              <button className="btn danger" onClick={() => { setAskResign(false); onResign?.(); }}>{lang === 'nl' ? 'Ja, opgeven' : 'Yes, resign'}</button>
+            </div>
           </div>
         </div>
       )}

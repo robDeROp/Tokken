@@ -2,7 +2,8 @@
 // node --experimental-strip-types scripts/ai-train/gen.ts <spellen> <seed> <uit.bin> [net.json]
 import { writeFileSync, readFileSync } from 'node:fs';
 import { newGame, applyAction, botActionLevel, teamOf, needsFreeExit, type Color, type Action, type State } from '../../lib/engine.ts';
-import { candidates, viewAfter, features, chooseAction, N_FEATURES, type Net } from '../../lib/ai.ts';
+import { candidates, viewAfter, features, chooseAction, valueOf, N_FEATURES, type Net } from '../../lib/ai.ts';
+import { humanProbs, sampleIndex } from '../../lib/human.ts';
 
 import { mulberry } from './util.ts';
 
@@ -11,10 +12,12 @@ const net: Net | null = process.argv[5] ? JSON.parse(readFileSync(process.argv[5
 const KEEP = Number(process.env.KEEP || 0.3);   // aandeel zetten dat we bewaren
 const EPS = Number(process.env.EPS || 0.06);    // af en toe iets willekeurigs (verkennen)
 
-type Pol = { kind: 'lvl'; level: 3 | 4 | 5 } | { kind: 'ai'; temp: number };
+type Pol = { kind: 'lvl'; level: 3 | 4 | 5 } | { kind: 'ai'; temp: number } | { kind: 'hum'; temp: number };
 function pickPolicy(rng: () => number): Pol {
   const r = rng();
-  if (net && r < 0.6) return { kind: 'ai', temp: rng() < 0.5 ? 0 : 0.3 };
+  // spelers die spelen zoals de mensen (voorkeursmodel uit move_log), zodat het netwerk ook die standen leert kennen
+  if (net && r < 0.25) return { kind: 'hum', temp: rng() < 0.5 ? 0.5 : 1 };
+  if (net && r < 0.75) return { kind: 'ai', temp: rng() < 0.5 ? 0 : 0.3 };
   const l = [3, 4, 5, 5][Math.floor(rng() * 4)] as 3 | 4 | 5;
   return { kind: 'lvl', level: l };
 }
@@ -22,6 +25,13 @@ function pickPolicy(rng: () => number): Pol {
 function act(st: State, c: Color, pol: Pol, rng: () => number): Action {
   const hand = st.hands[c];
   if (needsFreeExit(st.pieces, c, st.sticks[c], st.freeExitDone, hand)) return botActionLevel(st, c, 5, rng);
+  if (pol.kind === 'hum') {
+    const cands = candidates(st, c, rng, 60);
+    if (!cands.length) return { type: 'discardAll' };
+    if (cands.length === 1) return cands[0].a;
+    const vals = cands.map((cd) => valueOf(cd.view, c, net));
+    return cands[sampleIndex(humanProbs(st, c, cands, vals, undefined, pol.temp), rng)].a;
+  }
   if (pol.kind === 'ai' || rng() < EPS) {
     const cands = candidates(st, c, rng, 60);
     if (!cands.length) return { type: 'discardAll' };

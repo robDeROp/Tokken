@@ -221,10 +221,11 @@ export function playMove(last: LastMove | null, plan: Plan | null, me: number | 
   plan.kills.forEach((k, i) => {
     const at = ms(k.delay);
     clack(c, at, 0.42);
-    rollBed(c, at + 0.05, plan.killMs / 1000 * 0.8, 0.07);
-    tok(c, at + plan.killMs / 1000, 0.3, 0.85);
-    tok(c, at + (plan.killMs * 1.36) / 1000, 0.13, 0.9);  // nastuiteren in het kot
-    tok(c, at + (plan.killMs * 1.55) / 1000, 0.06, 0.95);
+    whoosh(c, at + 0.08, plan.killMs / 1000);                           // door de lucht
+    const land = at + 0.08 + plan.killMs / 1000;
+    tok(c, land, 0.34, 0.85);
+    tok(c, land + (plan.killMs * 0.2) / 1000, 0.12, 0.9);                // nastuiteren in het kot
+    tok(c, land + (plan.killMs * 0.38) / 1000, 0.05, 0.95);
     if (me === null || i > 0) return;
     const team = (x: number) => x % 2;
     if (k.color === me) sad(c, at + 0.12, 1);                       // jij bent geslagen
@@ -349,4 +350,19 @@ export function playLaneDone(ours = false) {
   notes.forEach((f, i) => marimba(c, t + i * 0.11, f, (ours ? 0.17 : 0.11) * (i === 3 ? 1.15 : 1), i === 3 ? 0.9 : 0.5));
   knock(c, t + 0.44, ours ? 0.3 : 0.18);
   if (ours) { marimba(c, t + 0.55, 1318.5, 0.12, 1); shimmer(c, t + 0.5, 0.07); }
+}
+
+/** Zoef: gefilterde ruis die stijgt en daalt, zoals iets dat door de lucht vliegt. */
+function whoosh(c: AudioContext, at: number, dur: number) {
+  const s = c.createBufferSource(); s.buffer = noise!;
+  const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.2;
+  bp.frequency.setValueAtTime(500, at);
+  bp.frequency.exponentialRampToValueAtTime(1900, at + dur * 0.45);
+  bp.frequency.exponentialRampToValueAtTime(600, at + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, at);
+  g.gain.exponentialRampToValueAtTime(0.09, at + dur * 0.4);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  s.connect(bp); bp.connect(g); g.connect(out!);
+  s.start(at, Math.random() * 0.3, dur + 0.05);
 }

@@ -51,7 +51,7 @@ const TOKEN_AT: XY = [-422, 352];
 const DEALER_AT: XY = [-335, 268];
 const DECK_AT: XY = DEALER_AT; // de deler schudt op zijn eigen plek
 
-type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label' | 'glow' | 'pop' | 'bang' | 'ghost'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
+type Fx = { id: number; kind: 'ripple' | 'splinter' | 'home' | 'confetti' | 'dust' | 'spark' | 'deal' | 'deck' | 'label' | 'glow' | 'pop' | 'bang' | 'trail' | 'kshadow'; x: number; y: number; color: Color; delay: number; r?: number; dx?: number; dy?: number; dur?: number; text?: string };
 let fxId = 0;
 const reducedMotion = () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
@@ -205,37 +205,46 @@ export default function Board(p: Props) {
           if (!el || !was || !is) continue;
           handled.add(k.piece);
           if (Math.hypot(was[0] - is[0], was[1] - is[1]) < 1) continue;
-          // weggekatapulteerd: hoge boog (naar buiten), dan twee keer nastuiteren in het kot
-          const mx = (was[0] + is[0]) / 2 * 1.22, my = (was[1] + is[1]) / 2 * 1.22;
-          const fly = plan.killMs, bounce = Math.round(fly * 0.55);
-          const nx = is[0] - mx, ny = is[1] - my, nl = Math.hypot(nx, ny) || 1; // stuiter-richting: terug langs de aanvliegroute
-          const bx = (-nx / nl) * 16, byy = (-ny / nl) * 16;
-          el.animate([
-            { transform: `translate(${was[0]}px, ${was[1]}px)` },
-            { transform: `translate(${mx}px, ${my}px)`, offset: 0.4 },
-            { transform: `translate(${is[0]}px, ${is[1]}px)`, offset: 0.66, easing: 'ease-out' },
-            { transform: `translate(${is[0] + bx}px, ${is[1] + byy}px)`, offset: 0.78, easing: 'ease-in' },
-            { transform: `translate(${is[0]}px, ${is[1]}px)`, offset: 0.88, easing: 'ease-out' },
-            { transform: `translate(${is[0] + bx * 0.35}px, ${is[1] + byy * 0.35}px)`, offset: 0.94, easing: 'ease-in' },
-            { transform: `translate(${is[0]}px, ${is[1]}px)` },
-          ], { duration: fly + bounce, delay: k.delay, easing: 'cubic-bezier(.2,.6,.35,1)', fill: 'backwards' });
-          inn?.animate([{ transform: 'scale(1) rotate(0deg)' }, { transform: 'scale(1.4) rotate(320deg)', offset: 0.4 }, { transform: 'scale(1) rotate(640deg)', offset: 0.66 },
-            { transform: 'scale(1.12, .86) rotate(640deg)', offset: 0.7 }, { transform: 'scale(1) rotate(660deg)' }], { duration: fly + bounce, delay: k.delay, easing: 'ease-out' });
-          // schimmetjes langs de boog
-          for (let g = 1; g <= 4; g++) {
-            const t = g / 5, u = 1 - t;
-            const gx = u * u * was[0] + 2 * u * t * mx + t * t * is[0], gy = u * u * was[1] + 2 * u * t * my + t * t * is[1];
-            items.push({ kind: 'ghost', x: gx, y: gy, color: k.color, delay: k.delay + t * (fly + bounce) * 0.66, r: 1 - g * 0.12 });
-          }
+          // weggekatapulteerd: even "hit-stop" en indeuken, dan in een vloeiende hoge boog naar het kot,
+          // met een komeetstaart in zijn kleur en een schaduw die op het bord blijft; landen = indeuken + nastuiteren
+          const HOLD = 80;
+          const fly = plan.killMs, bounce = Math.round(fly * 0.5);
+          const cx = (was[0] + is[0]) / 2 * 1.3, cy = (was[1] + is[1]) / 2 * 1.3; // controlepunt: naar buiten = hoog
+          const bez = (t: number): XY => { const u = 1 - t; return [u * u * was[0] + 2 * u * t * cx + t * t * is[0], u * u * was[1] + 2 * u * t * cy + t * t * is[1]]; };
+          const N = 14, flyFrac = fly / (fly + bounce);
+          const frames: Keyframe[] = [];
+          for (let j = 0; j <= N; j++) { const [x, y] = bez(j / N); frames.push({ transform: `translate(${x}px, ${y}px)`, offset: (j / N) * flyFrac, easing: 'linear' }); }
+          const nx = is[0] - cx, ny = is[1] - cy, nl = Math.hypot(nx, ny) || 1; // stuiteren: terug langs de aanvliegroute
+          const bx = (-nx / nl) * 14, byy = (-ny / nl) * 14;
+          frames.push({ transform: `translate(${is[0] + bx}px, ${is[1] + byy}px)`, offset: flyFrac + (1 - flyFrac) * 0.4, easing: 'ease-in' });
+          frames.push({ transform: `translate(${is[0]}px, ${is[1]}px)`, offset: flyFrac + (1 - flyFrac) * 0.75, easing: 'ease-out' });
+          frames.push({ transform: `translate(${is[0]}px, ${is[1]}px)`, offset: 1 });
+          el.animate([{ transform: `translate(${was[0]}px, ${was[1]}px)` }, { transform: `translate(${was[0]}px, ${was[1]}px)` }],
+            { duration: HOLD, delay: k.delay, fill: 'backwards' });
+          el.animate(frames, { duration: fly + bounce, delay: k.delay + HOLD, fill: 'backwards' });
+          inn?.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.28, .7)' }], { duration: HOLD, delay: k.delay, easing: 'ease-out' });
+          inn?.animate([
+            { transform: 'scale(1.28, .7) rotate(0deg)' },
+            { transform: 'scale(1.45) rotate(330deg)', offset: flyFrac * 0.5 },          // hoog in de lucht = dichter bij ons
+            { transform: 'scale(1) rotate(660deg)', offset: flyFrac },
+            { transform: 'scale(1.18, .82) rotate(660deg)', offset: flyFrac + (1 - flyFrac) * 0.15 },
+            { transform: 'scale(.96, 1.04) rotate(675deg)', offset: flyFrac + (1 - flyFrac) * 0.55 },
+            { transform: 'scale(1) rotate(680deg)' },
+          ], { duration: fly + bounce, delay: k.delay + HOLD, easing: 'ease-out' });
+          const flyMs = Math.round(fly);
+          const d = `M ${was[0]} ${was[1]} Q ${cx} ${cy} ${is[0]} ${is[1]}`;
+          items.push({ kind: 'trail', x: 0, y: 0, color: k.color, delay: k.delay + HOLD, dur: flyMs, text: d });
+          items.push({ kind: 'kshadow', x: was[0], y: was[1], color: k.color, delay: k.delay + HOLD, dur: flyMs, dx: is[0] - was[0], dy: is[1] - was[1] });
           items.push({ kind: 'bang', x: was[0], y: was[1], color: k.color, delay: k.delay });
-          items.push({ kind: 'dust', x: is[0], y: is[1], color: k.color, delay: k.delay + (fly + bounce) * 0.66 });
+          items.push({ kind: 'dust', x: is[0], y: is[1], color: k.color, delay: k.delay + HOLD + fly });
           const victim = k.color as Color;
           setTimeout(() => setOuch(victim), k.delay + 60);
           setTimeout(() => setOuch((cur) => (cur === victim ? null : cur)), k.delay + 1100);
           const by = p.last.by as Color;
-          for (let i = 0; i < 9; i++) {
-            const a = (i / 9) * Math.PI * 2 + Math.random() * 0.5, d = 34 + Math.random() * 26;
-            items.push({ kind: 'splinter', x: was[0], y: was[1], color: i % 3 ? by : k.color, delay: k.delay, dx: Math.cos(a) * d, dy: Math.sin(a) * d, r: (a * 180) / Math.PI });
+          for (let i = 0; i < 10; i++) {
+            const a = (i / 10) * Math.PI * 2 + Math.random() * 0.5, dist = 30 + Math.random() * 30;
+            // houtsplinters (r = hoek) en een paar glasschilfers in de kleur van de aanvaller
+            items.push({ kind: 'splinter', x: was[0], y: was[1], color: by, delay: k.delay, dx: Math.cos(a) * dist, dy: Math.sin(a) * dist, r: (a * 180) / Math.PI, text: i % 3 ? 'wood' : undefined });
           }
           items.push({ kind: 'ripple', x: was[0], y: was[1], color: by, delay: k.delay, r: 1.6 });
         }
@@ -305,27 +314,43 @@ export default function Board(p: Props) {
     <svg className="board" viewBox="-520 -520 1040 1040" role="img" aria-label="Tokken bord">
       <defs>
         <linearGradient id="boardWood" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#d5ad7b" />
-          <stop offset="0.48" stopColor="#c99a65" />
-          <stop offset="1" stopColor="#b98550" />
+          <stop offset="0" style={{ stopColor: 'var(--wood-1)' }} />
+          <stop offset="0.48" style={{ stopColor: 'var(--wood-2)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--wood-3)' }} />
         </linearGradient>
         <linearGradient id="boardEdge" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#855a37" />
-          <stop offset="0.15" stopColor="#edcf9f" />
-          <stop offset="0.5" stopColor="#a46d41" />
-          <stop offset="0.88" stopColor="#d9b17b" />
-          <stop offset="1" stopColor="#755033" />
+          <stop offset="0" style={{ stopColor: 'var(--edge-1)' }} />
+          <stop offset="0.15" style={{ stopColor: 'var(--edge-2)' }} />
+          <stop offset="0.5" style={{ stopColor: 'var(--edge-3)' }} />
+          <stop offset="0.88" style={{ stopColor: 'var(--edge-4)' }} />
+          <stop offset="1" style={{ stopColor: 'var(--edge-1)' }} />
         </linearGradient>
         <pattern id="woodGrain" width="320" height="116" patternUnits="userSpaceOnUse">
           <path d="M-40 20 C36 15 92 29 160 20 S280 14 355 24 M-40 82 C48 73 102 91 180 81 S277 75 350 85"
-            fill="none" stroke="#744a2c" strokeOpacity=".045" strokeWidth="1.5" />
+            fill="none" style={{ stroke: 'var(--grain-dark)', strokeOpacity: 'var(--grain-dark-op)' }} strokeWidth="1.5" />
           <path d="M-40 25 C36 20 92 34 160 25 S280 19 355 29 M-40 87 C48 78 102 96 180 86 S277 80 350 90"
-            fill="none" stroke="#fff0d1" strokeOpacity=".055" strokeWidth="1" />
+            fill="none" style={{ stroke: 'var(--grain-light)', strokeOpacity: 'var(--grain-light-op)' }} strokeWidth="1" />
+        </pattern>
+        {/* themapatronen (enkel zichtbaar in het bijhorende thema) */}
+        <pattern id="decoSnow" width="150" height="150" patternUnits="userSpaceOnUse">
+          {[[30, 34, 9], [104, 62, 6], [64, 118, 7.5], [136, 128, 4.5]].map(([x, y, r], i) => (
+            <g key={i} transform={`translate(${x} ${y})`} stroke="#ffffff" strokeWidth="1.6" strokeLinecap="round" fill="none">
+              {[0, 60, 120].map((a) => <path key={a} transform={`rotate(${a})`} d={`M 0 ${-r} V ${r} M ${-r * 0.3} ${-r * 0.65} L 0 ${-r * 0.4} L ${r * 0.3} ${-r * 0.65} M ${-r * 0.3} ${r * 0.65} L 0 ${r * 0.4} L ${r * 0.3} ${r * 0.65}`} />)}
+            </g>
+          ))}
+        </pattern>
+        <pattern id="decoStars" width="130" height="130" patternUnits="userSpaceOnUse">
+          {[[20, 30, 2.2], [90, 18, 1.4], [62, 74, 2.8], [118, 96, 1.6], [28, 112, 1.8]].map(([x, y, r], i) => (
+            <path key={i} d={`M ${x} ${y - r * 2.4} L ${x + r * .55} ${y - r * .55} L ${x + r * 2.4} ${y} L ${x + r * .55} ${y + r * .55} L ${x} ${y + r * 2.4} L ${x - r * .55} ${y + r * .55} L ${x - r * 2.4} ${y} L ${x - r * .55} ${y - r * .55} Z`} fill="#f3dc9a" />
+          ))}
+        </pattern>
+        <pattern id="decoSand" width="60" height="60" patternUnits="userSpaceOnUse">
+          {[[8, 10], [33, 6], [52, 22], [18, 33], [41, 41], [6, 52], [27, 55], [55, 50]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r={i % 3 ? 0.9 : 1.4} fill="#7d6a4b" />)}
         </pattern>
         <radialGradient id="hole" cx="50%" cy="42%" r="60%">
-          <stop offset="0%" stopColor="#8a5a2f" />
-          <stop offset="70%" stopColor="#a36f3f" />
-          <stop offset="100%" stopColor="#6b4220" />
+          <stop offset="0%" style={{ stopColor: 'var(--hole-1)' }} />
+          <stop offset="70%" style={{ stopColor: 'var(--hole-2)' }} />
+          <stop offset="100%" style={{ stopColor: 'var(--hole-3)' }} />
         </radialGradient>
         {COLORS.map((c) => (
           <radialGradient key={c} id={`m${c}`} cx="35%" cy="30%" r="75%">
@@ -352,11 +377,14 @@ export default function Board(p: Props) {
         </radialGradient>
       </defs>
 
-      <rect x="-519" y="-519" width="1038" height="1038" rx="24" fill="#65452f" />
+      <rect x="-519" y="-519" width="1038" height="1038" rx="24" style={{ fill: 'var(--frame)' }} />
       <rect x="-515" y="-515" width="1030" height="1030" rx="20" fill="url(#boardEdge)" />
       <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#boardWood)" />
       <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#woodGrain)" />
-      <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="none" stroke="#684629" strokeOpacity=".23" strokeWidth="2" />
+      <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#decoSnow)" className="deco deco-snow" />
+      <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#decoStars)" className="deco deco-stars" />
+      <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="url(#decoSand)" className="deco deco-sand" />
+      <rect x="-506" y="-506" width="1012" height="1012" rx="15" fill="none" style={{ stroke: 'var(--frame)' }} strokeOpacity=".23" strokeWidth="2" />
 
       {/* gaatjes van het parcours */}
       {Array.from({ length: TRACK }, (_, i) => {
@@ -540,7 +568,14 @@ export default function Board(p: Props) {
           if (f.kind === 'dust') return <circle key={f.id} cx={f.x} cy={f.y} r={16} className="fx-dust" style={st} />;
           if (f.kind === 'bang') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><path className="fx-bang" style={st}
             d="M0,-34 L8,-13 L30,-20 L16,-3 L33,10 L11,12 L9,33 L-3,16 L-21,28 L-15,7 L-34,-2 L-13,-9 L-20,-28 L-4,-15 Z" /></g>;
-          if (f.kind === 'ghost') return <circle key={f.id} cx={f.x} cy={f.y} r={17 * (f.r ?? 1)} className="fx-ghost" fill={`url(#m${f.color})`} style={st} />;
+          if (f.kind === 'trail') {
+            const tv = { ...st, ['--dur' as string]: `${f.dur}ms` } as React.CSSProperties;
+            return <g key={f.id} className="fx-trail">
+              <path d={f.text} pathLength={1} className="fx-trail-glow" stroke={COLOR_HEX[f.color]} style={tv} />
+              <path d={f.text} pathLength={1} className="fx-trail-core" style={tv} />
+            </g>;
+          }
+          if (f.kind === 'kshadow') return <ellipse key={f.id} cx={f.x + 3} cy={f.y + 6} rx={18} ry={15} className="fx-kshadow" style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--dur' as string]: `${f.dur}ms` }} />;
           if (f.kind === 'glow') return <circle key={f.id} cx={f.x} cy={f.y} r={21} className="fx-glow" style={st} />;
           if (f.kind === 'pop') return <circle key={f.id} cx={f.x} cy={f.y} r={11 * (f.r ?? 1)} className="fx-pop" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
           if (f.kind === 'home') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><circle r={22} className="fx-home" stroke={COLOR_HEX[f.color]} style={st} /><circle r={22} className="fx-home late" stroke="#fff3c4" style={{ animationDelay: `${f.delay + 120}ms` }} /></g>;
@@ -548,7 +583,7 @@ export default function Board(p: Props) {
           if (f.kind === 'deck') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-deck" style={{ ['--dur' as string]: `${f.dur}ms` }}>{[0, 1, 2, 3].map((i) => <rect key={i} x={-28 + i * 1.5} y={-40 - i * 2.5} width={56} height={80} rx={7} className="card-back" />)}</g></g>;
           if (f.kind === 'label') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><g className="fx-label" style={{ ['--dur' as string]: `${f.dur}ms`, animationDelay: `${f.delay}ms` }}><rect x={-105} y={-21} width={210} height={42} rx={21} stroke={COLOR_HEX[f.color]} /><text x={0} y={1}>{f.text}</text></g></g>;
           if (f.kind === 'spark') return <path key={f.id} d={`M ${f.x} ${f.y - 7} L ${f.x + 2} ${f.y - 2} L ${f.x + 7} ${f.y} L ${f.x + 2} ${f.y + 2} L ${f.x} ${f.y + 7} L ${f.x - 2} ${f.y + 2} L ${f.x - 7} ${f.y} L ${f.x - 2} ${f.y - 2} Z`} className="fx-spark" style={st} />;
-          if (f.kind === 'splinter') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><rect x={-2} y={-7} width={4} height={13} rx={2} className="fx-splinter" fill={COLOR_HEX[f.color]} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg` }} /></g>;
+          if (f.kind === 'splinter') return <g key={f.id} transform={`translate(${f.x} ${f.y})`}><rect x={f.text === 'wood' ? -1.6 : -2.5} y={f.text === 'wood' ? -8 : -3} width={f.text === 'wood' ? 3.2 : 5} height={f.text === 'wood' ? 15 : 6} rx={f.text === 'wood' ? 1.2 : 1} className={`fx-splinter ${f.text === 'wood' ? 'wood' : 'glass'}`} fill={f.text === 'wood' ? '#c9935a' : COLOR_HEX[f.color]} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px`, ['--r' as string]: `${f.r}deg` }} /></g>;
           return <circle key={f.id} cx={f.x} cy={f.y} r={9 * (f.r ?? 1)} className="fx-confetti" fill={`url(#m${f.color})`} style={{ ...st, ['--dx' as string]: `${f.dx}px`, ['--dy' as string]: `${f.dy}px` }} />;
         })}
       </g>

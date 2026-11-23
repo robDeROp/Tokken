@@ -74,6 +74,20 @@ export default function Practice({ mode }: { mode: Mode }) {
     });
   }, []);
 
+  // opgeven: telt als verlies
+  const [resigned, setResigned] = useState(false);
+  const resignedRef = useRef(false);
+  const resign = useCallback(() => {
+    setSt((cur) => {
+      if (!cur || cur.winner !== null) return cur;
+      resignedRef.current = true;
+      setResigned(true);
+      const n = clone(cur);
+      n.winner = 1; // de computers winnen
+      return n;
+    });
+  }, []);
+
   const begin = useCallback((lv: Levels) => {
     flush();
     setPracticeLevels(lv);
@@ -81,6 +95,7 @@ export default function Practice({ mode }: { mode: Mode }) {
     const id = crypto.randomUUID();
     sessionId.current = id;
     resultRecorded.current = false;
+    setResigned(false); resignedRef.current = false;
     setRating(null);
     matchReady.current = userId
       ? Promise.resolve(sb().rpc('start_practice', { p_id: id, p_mode: mode, p_levels: lv })).then(({ error }) => {
@@ -109,7 +124,10 @@ export default function Practice({ mode }: { mode: Mode }) {
       flush();
       await Promise.all(inflight.current.splice(0));
       if (!ok) { if (sessionId.current === id) setRating({ state: 'none' }); return; }
-      const { data, error } = await sb().rpc('finish_practice', { p_id: id, p_winner: winner, p_home: st.homeBy ?? null, p_rounds: st.round, p_lanes: lanesPerColor(st.pieces) });
+      const extra = { p_home: st.homeBy ?? null, p_rounds: st.round, p_lanes: lanesPerColor(st.pieces) };
+      const { data, error } = resignedRef.current
+        ? await sb().rpc('resign_practice', { p_id: id, ...extra })
+        : await sb().rpc('finish_practice', { p_id: id, p_winner: winner, ...extra });
       if (sessionId.current !== id) return;
       const mine = Array.isArray(data) ? data.find((x: { seat: number }) => x.seat === 0) : null;
       if (error || !mine) { setRating({ state: 'none' }); return; }
@@ -219,6 +237,6 @@ export default function Practice({ mode }: { mode: Mode }) {
   return (
     <Game game={game} pub={game.state!} me={{ playerId: 'me', seat: 0, hand: st.hands[0], version: st.moveNo }}
       isHost online={new Set(['me'])} call={call} busy={false} msg={msg} setMsg={setMsg} mascot
-      rating={rating} rematchLabel={t.rematch} />
+      rating={rating} rematchLabel={t.rematch} onResign={resign} resigned={resigned} />
   );
 }

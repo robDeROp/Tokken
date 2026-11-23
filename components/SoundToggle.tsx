@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/lib/i18n';
 import { onSoundChange, setSoundEnabled, soundEnabled } from '@/lib/sound';
+import { THEMES, getTheme, setTheme, onThemeChange, type ThemeId } from '@/lib/themes';
 import { getSpeed, onSpeedChange, setSpeed, SPEEDS, SPEED_LABEL, getMascot, setMascot, onMascotChange, type Speed } from '@/lib/prefs';
 
 export default function SoundToggle() {
@@ -31,4 +32,18 @@ export function MascotToggle() {
   return <button className="btn small" aria-pressed={on} onClick={() => setMascot(!on)}>
     Tokske: {on ? (lang === 'nl' ? 'aan' : 'on') : (lang === 'nl' ? 'uit' : 'off')}
   </button>;
+}
+
+/** Bord- en tafelthema kiezen (per toestel bewaard). */
+export function ThemePicker() {
+  const { lang } = useT();
+  const [theme, setLocal] = useState<ThemeId>('klassiek');
+  useEffect(() => { setLocal(getTheme()); return onThemeChange(setLocal); }, []);
+  return <div className="theme-picker" role="radiogroup" aria-label={lang === 'nl' ? 'Thema' : 'Theme'}>
+    {THEMES.map((th) => <button key={th.id} type="button" role="radio" aria-checked={theme === th.id}
+      className={theme === th.id ? 'on' : ''} onClick={() => setTheme(th.id)}>
+      <span className="sw" style={{ background: `radial-gradient(circle at 50% 50%, ${th.swatch[0]} 0 52%, ${th.swatch[1]} 54%)` }} />
+      {th.name[lang === 'nl' ? 'nl' : 'en']}
+    </button>)}
+  </div>;
 }
