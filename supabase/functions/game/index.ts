@@ -66,8 +66,9 @@ const NOOP = Symbol('noop');
 
 /** Stand vóór een zet, voor het trainingslogboek (zonder het groeiende verloop). */
 function snapshotForLog(st: State) {
-  const { log: _log, ...rest } = structuredClone(st);
-  return rest;
+  // zonder verloop en zonder de volgorde van het pak (niet nodig om te leren, en het grootste deel van de rij)
+  const { log: _log, deck, center: _center, ...rest } = structuredClone(st);
+  return { ...rest, deckCount: deck.length };
 }
 
 /** Schrijf terug met versiecontrole; bij een botsing opnieuw proberen. */
@@ -185,6 +186,10 @@ Deno.serve(async (req) => {
       const pid = who(s, body.token);
       const text = String(body.text ?? '').trim().slice(0, 300);
       if (!text) throw new HttpError(400, 'empty');
+      // tegen spam: hoogstens 5 berichten per 15 seconden per speler
+      const since = new Date(Date.now() - 15000).toISOString();
+      const { count } = await db.from('chat_messages').select('id', { count: 'exact', head: true }).eq('code', code).eq('player_id', pid).gte('at', since);
+      if ((count ?? 0) >= 5) throw new HttpError(429, 'slow_down');
       const seat = seatOf(g, pid);
       const name = g.players.find((p) => p.id === pid)?.name ?? 'Speler';
       const { data, error } = await db.from('chat_messages').insert({ code, player_id: pid, name, color: seat, text }).select().single();
