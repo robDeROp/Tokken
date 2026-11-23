@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, sb } from '@/lib/supabase';
 import { useT } from '@/lib/i18n';
+import { censor } from '@/lib/profanity';
 
 type Message = { id: number; player_id: string; name: string; color: number | null; text: string; at: string };
 export default function Chat({ gameId, code, token, playerId }: { gameId: string; code: string; token: string; playerId: string }) {
@@ -51,7 +52,7 @@ export default function Chat({ gameId, code, token, playerId }: { gameId: string
       {!messages.length && <p className="muted small">{lang === 'nl' ? 'Zeg iets tegen je tafelgenoten.' : 'Say hello to your table.'}</p>}
       {messages.map((m) => <div key={m.id} className={`chat-message ${m.player_id === playerId ? 'own' : ''}`}>
         <div><strong>{m.name}</strong> <time>{new Date(m.at).toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' })}</time></div>
-        <p>{m.text}</p>
+        <p>{censor(m.text)}</p>
       </div>)}
     </div>
     <form onSubmit={async (e) => {

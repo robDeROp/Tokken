@@ -126,3 +126,11 @@ De huidige variant blijft vier spelers in twee ploegen. Zes spelers vraagt een a
   3. Zet het resultaat in `lib/human-weights.ts` en `npm run sync-engine`.
 - **De Kloon** (niveau 10): speelt met dat mensenmodel, dus zoals jullie.
 - **Netwerk ronde 3**: 30.000 nieuwe spellen (AI, robots én spelers die als mensen spelen), 96 verborgen neuronen. Arena: wint 54% tegen het vorige netwerk.
+
+## Update: muziek, chatfilter, verplichte login
+
+- **Achtergrondmuziek** (`lib/music.ts`): per thema een eigen stijl, live gesynthetiseerd (geen bestanden). Speelt tijdens het spel; effecten en muziek hebben elk een eigen volume (menu in het spel, of het venster "Stijl").
+- **Scheldwoordenfilter** (`lib/profanity.ts`): chatberichten en spelersnamen worden op de server gecensureerd (*****), de chat filtert ook oudere berichten.
+- **Chat** ook in de wachtkamer van een online kamer.
+- **Verplicht aanmelden met Google** voor kamers maken, meedoen en oefenen (`app_config.require_login`; zet op `false` om tijdelijk zonder login te spelen). E-mail-login staat uit in Supabase Auth.
+- **Server uitrollen**: de Edge Function laadt `supabase/functions/game/index.ts` van een vaste GitHub-commit (zie de entry in Supabase). Na een wijziging: commit + push, en rol een entry uit met de nieuwe commit-hash.

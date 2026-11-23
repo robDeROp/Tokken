@@ -899,6 +899,7 @@ body {
 /* ======================= thema's =======================
    Elk thema zet dezelfde variabelen; het bord (SVG) en de tafel lezen ze. */
 :root, [data-theme="klassiek"] {
+  --sheet-bg: #fbf8f2; --sheet-card: #ffffff; --sheet-ink: #2a2622; --sheet-muted: #7a6a58; --sheet-line: #ece2d1; --table-solid: #22362d;
   --side-bg: rgba(245, 240, 229, .97); --side-edge: rgba(250, 246, 237, .55); --side-ink: #332c23; --side-muted: #655a4b; --side-row: #eee7d9;
   --table-size: auto;
   --panel-bg: #c99a65; --panel-edge: #806043; --panel-ink: #2b251e; --panel-speck: .08; --panel-row: #fbf8f299;
@@ -917,6 +918,7 @@ body {
   --deco-op: 0;
 }
 [data-theme="walnoot"] {
+  --sheet-bg: #3a2414; --sheet-card: #4a2e1a; --sheet-ink: #f6e6c8; --sheet-muted: #cdb38f; --sheet-line: rgba(246, 230, 200, .16); --table-solid: #2e1214;
   --side-bg: rgba(58, 36, 20, .96); --side-edge: rgba(200, 160, 110, .35); --side-ink: #f6e6c8; --side-muted: #cdb38f; --side-row: rgba(255, 240, 215, .08);
   --table-size: auto;
   --panel-bg: #5b3a24; --panel-edge: #2c1a0e; --panel-ink: #f6e6c8; --panel-speck: .05; --panel-row: rgba(255, 240, 215, .1);
@@ -934,6 +936,7 @@ body {
   --table-bg: radial-gradient(ellipse at 50% 40%, #5a2a2c 0%, #431d20 55%, #2e1214 100%);
 }
 [data-theme="nacht"] {
+  --sheet-bg: #161b27; --sheet-card: #1f2636; --sheet-ink: #ece3cc; --sheet-muted: #a9a08a; --sheet-line: rgba(201, 163, 90, .3); --table-solid: #0a1226;
   --side-bg: rgba(26, 32, 48, .96); --side-edge: rgba(201, 163, 90, .55); --side-ink: #ece3cc; --side-muted: #b9ae94; --side-row: rgba(230, 199, 125, .08);
   --table-size: auto;
   --panel-bg: #1c2230; --panel-edge: #c9a35a; --panel-ink: #ece3cc; --panel-speck: .03; --panel-row: rgba(230, 199, 125, .09);
@@ -957,6 +960,7 @@ body {
   --deco-op: .1;
 }
 [data-theme="picknick"] {
+  --sheet-bg: #fffaf2; --sheet-card: #ffffff; --sheet-ink: #3a1a0c; --sheet-muted: #7a5446; --sheet-line: #f0dccf; --table-solid: #b8322a;
   --side-bg: rgba(255, 250, 242, .97); --side-edge: rgba(184, 50, 42, .45); --side-ink: #3a1a0c; --side-muted: #7a5446; --side-row: #f6e7dc;
   --table-size: 34px 34px;
   --panel-bg: #fff6ea; --panel-edge: #b8322a; --panel-ink: #3a1a0c; --panel-speck: 0; --panel-row: rgba(184, 50, 42, .07);
@@ -978,6 +982,7 @@ body {
     #b8322a;
 }
 [data-theme="strand"] {
+  --sheet-bg: #fbf6ea; --sheet-card: #ffffff; --sheet-ink: #23404a; --sheet-muted: #5c7178; --sheet-line: #e8dcc4; --table-solid: #08363b;
   --side-bg: rgba(251, 245, 232, .97); --side-edge: rgba(201, 180, 142, .6); --side-ink: #23404a; --side-muted: #5c7178; --side-row: #efe6d3;
   --table-size: auto;
   --panel-bg: #f4ead6; --panel-edge: #c9b48e; --panel-ink: #23404a; --panel-speck: .06; --panel-row: rgba(15, 111, 122, .07);
@@ -998,6 +1003,7 @@ body {
   --deco-op: .35;
 }
 [data-theme="winter"] {
+  --sheet-bg: #f7fafc; --sheet-card: #ffffff; --sheet-ink: #23374d; --sheet-muted: #5d7186; --sheet-line: #dde6ee; --table-solid: #0b2118;
   --side-bg: rgba(247, 250, 252, .97); --side-edge: rgba(159, 178, 195, .6); --side-ink: #23374d; --side-muted: #5d7186; --side-row: #e8eef4;
   --table-size: auto;
   --panel-bg: #eef3f7; --panel-edge: #9fb2c3; --panel-ink: #23374d; --panel-speck: .05; --panel-row: rgba(95, 125, 155, .09);
@@ -1110,6 +1116,7 @@ body, .board .num, .board .hole-arch { transition: background-color .3s ease; }
 .side .chat-message p { color: var(--side-ink); }
 
 [data-theme="retro"] {
+  --sheet-bg: #070818; --sheet-card: #0d1030; --sheet-ink: #e8ecff; --sheet-muted: #9aa6ff; --sheet-line: rgba(43, 68, 255, .45); --table-solid: #020309;
   --side-bg: rgba(8, 10, 28, .96); --side-edge: #2b44ff; --side-ink: #e8ecff; --side-muted: #9aa6ff; --side-row: rgba(43, 68, 255, .14);
   --table-size: auto;
   --panel-bg: #070818; --panel-edge: #2b44ff; --panel-ink: #e8ecff; --panel-speck: 0; --panel-row: rgba(43, 68, 255, .14);
@@ -1150,7 +1157,8 @@ body, .board .num, .board .hole-arch { transition: background-color .3s ease; }
 [data-theme="retro"] .panel { box-shadow: 0 0 0 1px #2b44ff, 0 0 18px rgba(43, 68, 255, .45), 0 14px 30px rgba(0, 0, 0, .5); border-radius: 10px; }
 [data-theme="retro"] .panel h1, [data-theme="retro"] .panel h2, [data-theme="retro"] .panel h3, [data-theme="retro"] .h-hand {
   font-family: 'Press Start 2P', monospace; font-weight: 400; color: #ffd23f; letter-spacing: 0; font-size: 1rem; line-height: 1.5; }
-[data-theme="retro"] .btn { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: .72rem; letter-spacing: 0; border-radius: 4px; }
+[data-theme="retro"] .btn.primary, [data-theme="retro"] .btn.big { font-family: 'Press Start 2P', monospace; font-weight: 400; font-size: .72rem; letter-spacing: 0; }
+[data-theme="retro"] .btn { border-radius: 4px; }
 [data-theme="retro"] .btn.primary { box-shadow: 0 0 0 2px #05060f, 0 0 12px rgba(255, 210, 63, .55); }
 [data-theme="retro"] .hero h1 { font-family: 'Press Start 2P', monospace; font-weight: 400; color: #ffd23f; text-shadow: 4px 4px 0 #2b44ff, 0 0 22px rgba(255, 210, 63, .45); letter-spacing: 0; }
 [data-theme="retro"] .logo { font-family: 'Press Start 2P', monospace; font-size: 1rem; color: #ffd23f; }
@@ -1164,3 +1172,53 @@ body, .board .num, .board .hole-arch { transition: background-color .3s ease; }
 [data-theme="retro"] .tp-hole::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: #ffd9a3; box-shadow: 0 0 4px #ffd9a3; }
 [data-theme="retro"] .tp-panel { font-family: 'Press Start 2P', monospace; font-size: 8px; }
 [data-theme="retro"] .tp-btn { font-family: 'Press Start 2P', monospace; font-size: 7px; border-radius: 3px; }
+
+/* ---------- vellen (menu, spelerkaart, keuzerijen, lobby) volgen het thema ---------- */
+html { background: var(--table-solid); }
+.game-drawer { background: var(--sheet-bg); color: var(--sheet-ink); border-right-color: var(--sheet-line); }
+.drawer-heading { border-bottom-color: var(--sheet-line); }
+.drawer-heading .logo { color: var(--sheet-ink); }
+.drawer-heading p, .drawer-meta { color: var(--sheet-muted); }
+.drawer-control > span, .drawer-zoom { color: var(--sheet-ink); }
+.drawer-zoom input { accent-color: var(--accent); }
+.drawer-close, .pc-close { background: var(--sheet-card); color: var(--sheet-ink); border-color: var(--sheet-line); }
+.game-drawer .btn:not(.primary):not(.danger) { background: var(--sheet-card); color: var(--sheet-ink); border-color: var(--sheet-ink); box-shadow: 0 2px 0 var(--sheet-ink); }
+.game-drawer .btn.ghost.drawer-resign { background: transparent; color: #c0442f; border-color: rgba(192, 68, 47, .5); box-shadow: none; }
+.game-drawer .seg-picker { background: var(--sheet-card); border-color: var(--sheet-line); }
+.game-drawer .seg-picker button { color: var(--sheet-ink); }
+.game-drawer .seg-picker button.on { background: var(--sheet-ink); color: var(--sheet-bg); }
+.setup-row { background: var(--sheet-card); border-color: var(--sheet-line); color: var(--sheet-ink); }
+.setup-row .muted, .setup-row small { color: var(--sheet-muted); }
+.seat { background: color-mix(in srgb, var(--panel-ink) 7%, transparent); }
+.seat.mine { background: color-mix(in srgb, var(--panel-ink) 13%, transparent); }
+.mode { border-color: color-mix(in srgb, var(--panel-ink) 30%, transparent); background: color-mix(in srgb, var(--panel-ink) 6%, transparent); color: var(--panel-ink); }
+.mode span { color: color-mix(in srgb, var(--panel-ink) 72%, transparent); }
+.mode.on { border-color: var(--panel-ink); background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.player-card { background: var(--sheet-bg); color: var(--sheet-ink); }
+.pc-stat, .pc-chart, .pc-table-wrap { background: var(--sheet-card); border-color: var(--sheet-line); }
+.pc-who p, .pc-hero-label, .pc-stat span, .pc-section h3 span, .pc-table th, .pc-meta { color: var(--sheet-muted); }
+.pc-table .num { color: var(--sheet-ink); }
+.pc-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.pc-table td, .pc-table th { border-color: var(--sheet-line); }
+/* chat al in de wachtkamer */
+.lobby-chat { grid-column: 1 / -1; }
+.lobby-chat .chat { display: flex; flex-direction: column; }
+.lobby-chat .chat-messages { max-height: 220px; min-height: 90px; overflow-y: auto; }
+.login-card { max-width: 560px; margin: 8px auto 0; text-align: center; display: grid; gap: 12px; justify-items: center; }
+.login-card h2 { margin: 0; }
+.login-card p { margin: 0; max-width: 46ch; }
+.login-card .btn.google { width: auto; padding: 12px 22px; font-size: 1.02rem; }
+.setup-login { display: grid; gap: 10px; justify-items: center; text-align: center; } .setup-login .btn.google { width: 100%; padding: 13px; }
+
+/* ---------- geluid: effecten en muziek apart ---------- */
+.audio-controls { display: grid; gap: 8px; width: 100%; }
+.audio-row { display: grid; grid-template-columns: 34px 1fr 40px; align-items: center; gap: 8px; }
+.audio-mute { width: 34px; height: 34px; border-radius: 9px; border: 1px solid color-mix(in srgb, currentColor 25%, transparent); background: transparent; cursor: pointer; font-size: 16px; line-height: 1; }
+.audio-label { display: grid; gap: 2px; font-size: .8rem; font-weight: 700; }
+.audio-label input { width: 100%; accent-color: var(--accent); }
+.audio-pct { font-size: .75rem; font-variant-numeric: tabular-nums; text-align: right; opacity: .75; }
+.drawer-audio { display: grid; gap: 8px; margin: 14px 0; }
+.drawer-audio > span { color: var(--sheet-ink); font-size: .88rem; font-weight: 700; }
+.ts-audio { margin-top: 10px; padding-top: 12px; border-top: 1px solid color-mix(in srgb, var(--panel-ink) 20%, transparent); }
+.ts-audio h3 { margin: 0 0 4px; font-size: 1rem; }
+.ts-audio .audio-controls { max-width: 420px; }

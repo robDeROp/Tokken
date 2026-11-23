@@ -6,6 +6,7 @@ import { newGame, applyAction, publicView, RuleError, asLevel, botSeatName, lane
 import { useT } from '@/lib/i18n';
 import { getName, sb } from '@/lib/supabase';
 import { Game, Shell, type GameRow } from './Room';
+import LoginButton from './LoginButton';
 import LevelPicker from './LevelPicker';
 import { moveDuration, dealDuration } from '@/lib/board';
 import { getSpeed, getPracticeLevels, setPracticeLevels } from '@/lib/prefs';
@@ -27,7 +28,7 @@ function botNames(lv: number[]): string[] {
 }
 
 export default function Practice({ mode }: { mode: Mode }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [st, setSt] = useState<State | null>(null);
   const [msg, setMsg] = useState('');
   const [myName, setMyName] = useState('');
@@ -36,6 +37,8 @@ export default function Practice({ mode }: { mode: Mode }) {
   const [rating, setRating] = useState<RatingInfo | null>(null);
   const [myRating, setMyRating] = useState<number | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [needLogin, setNeedLogin] = useState(true);
   const botRatings = useBotRatings();
   const levelsRef = useRef<Levels>([2, 3, 2]);
   const matchReady = useRef<Promise<boolean>>(Promise.resolve(false));
@@ -66,8 +69,11 @@ export default function Practice({ mode }: { mode: Mode }) {
   useEffect(() => {
     setMyName(getName());
     setLevels(getPracticeLevels());
+    void sb().from('app_config').select('value').eq('key', 'require_login').maybeSingle()
+      .then(({ data }) => setNeedLogin(data?.value !== false));
     void currentUserId().then(async (uid) => {
       setUserId(uid);
+      setAuthChecked(true);
       if (!uid) return;
       const { data } = await sb().from('profiles').select('rating').eq('user_id', uid).maybeSingle();
       if (data) setMyRating(data.rating);
@@ -218,8 +224,10 @@ export default function Practice({ mode }: { mode: Mode }) {
             {userId ? <>{t.yourRating}: <strong>{me}</strong> · </> : null}
             {t.winChance}: <strong>{chance}%</strong>
           </p>
-          {!userId && <p className="muted small">{t.ratingLogin} <Link href="/">{t.loginGoogle}</Link></p>}
-          <button className="btn primary big" onClick={() => begin(levels)}>{t.startPractice}</button>
+          {!userId && !needLogin && <p className="muted small">{t.ratingLogin} <Link href="/">{t.loginGoogle}</Link></p>}
+          {!userId && needLogin
+            ? (authChecked ? <div className="setup-login"><p className="muted small">{lang === 'nl' ? 'Meld je aan met Google om te oefenen. Zo tellen je spellen mee voor je rating.' : 'Sign in with Google to practise. That way your games count for your rating.'}</p><LoginButton /></div> : null)
+            : <button className="btn primary big" onClick={() => begin(levels)}>{t.startPractice}</button>}
         </section>
       </Shell>
     );

@@ -6,6 +6,7 @@ import {
   type Action, type Color, type Mode, type State,
 } from './engine.ts';
 import { botMove } from './ai.ts';
+import { censor } from './profanity.ts';
 
 const cors = {
   'Access-Control-Allow-Origin': '*',
@@ -46,7 +47,7 @@ function makeCode() {
   for (let i = 0; i < 5; i++) s += abc[Math.floor(rng() * abc.length)];
   return s;
 }
-const cleanName = (n: unknown) => String(n ?? '').trim().slice(0, 20) || 'Speler';
+const cleanName = (n: unknown) => censor(String(n ?? '').trim().slice(0, 20)) || 'Speler';
 const BOT_NAMES = ['Robot Rik', 'Robot Roos', 'Robot Bert', 'Robot Fien'];
 
 async function load(code: string): Promise<{ g: GameRow; s: SecretRow }> {
@@ -127,6 +128,13 @@ async function rateOnline(g: GameRow, st: State, version: number) {
   if (r.error) console.error('apply_match_result', r.error.message);
 }
 
+/** Moet je aangemeld zijn om een kamer te maken of mee te doen? (app_config.require_login, standaard ja) */
+async function loginRequired(): Promise<boolean> {
+  const { data } = await db.from('app_config').select('key, value').in('key', ['require_login', 'require_login_to_create']);
+  const v = (data ?? []).find((r) => r.key === 'require_login') ?? (data ?? []).find((r) => r.key === 'require_login_to_create');
+  return v ? v.value !== false : true;
+}
+
 async function userFromAuth(req: Request) {
   const h = req.headers.get('Authorization') ?? '';
   const token = h.replace(/^Bearer\s+/i, '');
@@ -144,8 +152,13 @@ Deno.serve(async (req) => {
 
     if (op === 'create') {
       const user = await userFromAuth(req);
-      const { data: cfg } = await db.from('app_config').select('value').eq('key', 'require_login_to_create').maybeSingle();
-      if (cfg?.value === true && !user) throw new HttpError(401, 'login_required');
+      if (!user && await loginRequired()) throw new HttpError(401, 'login_required');
+      // tegen spam: hoogstens 30 kamers (gemaakt of meegedaan) per uur per account
+      if (user) {
+        const { count } = await db.from('room_players').select('game_id', { count: 'exact', head: true })
+          .eq('user_id', user.id).gte('joined_at', new Date(Date.now() - 3600_000).toISOString());
+        if ((count ?? 0) >= 30) throw new HttpError(429, 'slow_down');
+      }
       const name = cleanName(body.name ?? user?.user_metadata?.full_name);
       const playerId = rid(10);
       const token = rid(32);
@@ -166,6 +179,8 @@ Deno.serve(async (req) => {
     }
 
     if (op === 'join') {
+      const joiner = await userFromAuth(req);
+      if (!joiner && await loginRequired()) throw new HttpError(401, 'login_required');
       const name = cleanName(body.name);
       const playerId = rid(10);
       const token = rid(32);
@@ -176,15 +191,15 @@ Deno.serve(async (req) => {
         s.tokens[token] = playerId;
         gameId = g.id;
       });
-      const user = await userFromAuth(req);
-      await linkUser(gameId, playerId, user?.id);
+      await linkUser(gameId, playerId, joiner?.id);
       return json({ code, token, playerId });
     }
 
     if (op === 'chat') {
       const { g, s } = await load(code);
       const pid = who(s, body.token);
-      const text = String(body.text ?? '').trim().slice(0, 300);
+      // scheldwoorden worden al bij het bewaren vervangen door sterretjes
+      const text = censor(String(body.text ?? '').trim().slice(0, 300));
       if (!text) throw new HttpError(400, 'empty');
       // tegen spam: hoogstens 5 berichten per 15 seconden per speler
       const since = new Date(Date.now() - 15000).toISOString();

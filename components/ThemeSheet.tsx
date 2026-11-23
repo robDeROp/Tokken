@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useT } from '@/lib/i18n';
 import { THEMES, getTheme, setTheme, onThemeChange, type ThemeId } from '@/lib/themes';
+import { AudioControls } from './SoundToggle';
 
 function Preview({ id }: { id: ThemeId }) {
   return (
@@ -47,6 +48,11 @@ export function ThemeSheet({ onClose }: { onClose: () => void }) {
               <span className="ts-name">{th.name[lang === 'nl' ? 'nl' : 'en']}{cur === th.id && <span className="ts-check" aria-hidden="true">✓</span>}</span>
             </button>
           ))}
+        </div>
+        <div className="ts-audio">
+          <h3>{lang === 'nl' ? 'Geluid' : 'Sound'}</h3>
+          <p className="muted small">{lang === 'nl' ? 'Elk thema heeft zijn eigen achtergrondmuziek tijdens het spel.' : 'Each theme has its own background music during the game.'}</p>
+          <AudioControls />
         </div>
         <button className="btn primary ts-done" onClick={onClose}>{lang === 'nl' ? 'Klaar' : 'Done'}</button>
       </div>

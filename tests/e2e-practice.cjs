@@ -11,6 +11,8 @@ const out = process.env.SHOTS || '/tmp/';
   const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
+  // lokaal is Supabase niet bereikbaar: doe alsof aanmelden niet verplicht is
+  await p.route('**/rest/v1/app_config**', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ key: 'require_login', value: false }) }));
   await p.goto(`${base}/oefenen?mode=${mode}`, { waitUntil: 'networkidle' });
   // keuzescherm: niveaus van de computers (standaard laten) en starten
   await p.click('.practice-setup .btn.primary');

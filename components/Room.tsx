@@ -11,7 +11,9 @@ import { useT, LangToggle } from '@/lib/i18n';
 import { BrandTag, MadeBy } from './Brand';
 import Board, { COLOR_HEX, holeKey, type HoleRef } from './Board';
 import Chat from './Chat';
-import SoundToggle, { SpeedPicker, MascotToggle } from './SoundToggle';
+import { LoginCard } from './LoginButton';
+import { SpeedPicker, MascotToggle, AudioControls } from './SoundToggle';
+import { startMusic, stopMusic } from '@/lib/music';
 import { ThemeButton, ThemeSheet } from './ThemeSheet';
 import { TokskeCommentator } from './Tokske';
 import { moveDuration, dealDuration, dealTiming, SHUFFLE_MS } from '@/lib/board';
@@ -161,7 +163,7 @@ export default function Room({ code }: { code: string }) {
 
   const isHost = me?.playerId === game.host_player;
   if (game.status === 'lobby' || !pub) {
-    return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} /></Shell>;
+    return <Shell><Lobby game={game} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} token={token} /></Shell>;
   }
   return (
     <Game chatToken={token} game={game} pub={pub} me={me} isHost={isHost} online={online} call={call} busy={busy} msg={msg} setMsg={setMsg} rating={rating} />
@@ -183,10 +185,20 @@ export function Shell({ children }: { children: React.ReactNode }) {
 }
 
 function JoinBox({ code, onJoined }: { code: string; onJoined: (token: string) => void }) {
-  const { t } = useT();
+  const { t, lang } = useT();
   const [name, setN] = useState('');
   const [err, setErr] = useState('');
-  useEffect(() => setN(getName()), []);
+  const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  useEffect(() => {
+    setN(getName());
+    void sb().auth.getUser().then(({ data }) => {
+      setSignedIn(!!data.user);
+      if (data.user && !getName()) setN(String(data.user.user_metadata?.full_name ?? '').split(' ')[0]);
+    });
+  }, []);
+  if (signedIn === false) return <LoginCard title={`${t.room} ${code}`} text={lang === 'nl'
+    ? 'Je bent uitgenodigd voor een spelletje Tokken. Meld je aan met Google om mee te doen; daarna kom je meteen terug in deze kamer.'
+    : 'You were invited to a game of Tokken. Sign in with Google to join; you will come straight back to this room.'} />;
   return (
     <form className="panel narrow" onSubmit={async (e) => {
       e.preventDefault();
@@ -205,8 +217,8 @@ function JoinBox({ code, onJoined }: { code: string; onJoined: (token: string) =
   );
 }
 
-function Lobby({ game, me, isHost, online, call, busy, msg }: {
-  game: GameRow; me: Me | null; isHost: boolean; online: Set<string>;
+function Lobby({ game, me, isHost, online, call, busy, msg, token }: {
+  game: GameRow; me: Me | null; isHost: boolean; online: Set<string>; token: string;
   call: (b: Record<string, unknown>) => Promise<void>; busy: boolean; msg: string;
 }) {
   const { t, lang } = useT();
@@ -269,6 +281,7 @@ function Lobby({ game, me, isHost, online, call, busy, msg }: {
         ) : <p className="muted">{t.waitingHost}</p>}
         {msg && <p className="err">{msg}</p>}
       </section>
+      {me && <section className="panel lobby-chat side-like"><Chat gameId={game.id} code={game.code} token={token} playerId={me.playerId} /></section>}
     </div>
   );
 }
@@ -297,6 +310,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
   const myTurn = game.status === 'playing' && seat !== null && pub.turn === seat && pub.winner === null;
   const mode = pub.mode;
   const [askResign, setAskResign] = useState(false);
+  // achtergrondmuziek zolang het spel open is
+  useEffect(() => { startMusic(); return () => stopMusic(); }, []);
   const [showTheme, setShowTheme] = useState(false);
   // nieuwe ronde (of nieuw spel): kaarten uitdelen met animatie
   const [dealRound, setDealRound] = useState<number | null>(null);
@@ -529,7 +544,8 @@ export function Game({ game, pub, me, isHost, online, call, busy, msg, setMsg, c
           )}
           <div className="drawer-control"><span>{lang === 'nl' ? 'Taal' : 'Language'}</span><LangToggle /></div>
           <label className="drawer-zoom">{t.zoom}<input aria-label={t.zoom} type="range" min="1" max="1.7" step="0.1" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} /></label>
-          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button><SoundToggle />{mascot && <MascotToggle />}</div>
+          <div className="drawer-control"><button className="btn small" onClick={() => setZoom(1)}>100%</button>{mascot && <MascotToggle />}</div>
+          <div className="drawer-audio"><span>{lang === 'nl' ? 'Geluid' : 'Sound'}</span><AudioControls /></div>
           <div className="drawer-control drawer-speed"><span>{lang === 'nl' ? 'Snelheid' : 'Speed'}</span><SpeedPicker /></div>
           <div className="drawer-control"><span>{lang === 'nl' ? 'Stijl' : 'Style'}</span>
             <button className="btn small" onClick={() => { setShowTheme(true); setShowControls(false); }}>{lang === 'nl' ? 'Kies je stijl…' : 'Pick a style…'}</button></div>

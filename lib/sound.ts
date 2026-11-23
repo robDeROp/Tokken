@@ -7,25 +7,65 @@ import type { LastMove } from './engine';
 import type { Plan } from './board';
 import { currentTheme } from './themes';
 
-const KEY = 'tokken-sound';
+const KEY = 'tokken-sound';          // oud: aan/uit
+const SFX_KEY = 'tokken-sfx';        // volume geluidseffecten 0..1
+const MUSIC_KEY = 'tokken-music';    // volume achtergrondmuziek 0..1
 let ctx: AudioContext | null = null;
-let out: AudioNode | null = null;
-let wet: AudioNode | null = null; // galm (voor marimba en fanfare)
+let out: AudioNode | null = null;    // effecten-bus
+let sfxBus: GainNode | null = null;
+let musicBus: GainNode | null = null;
+let musicWet: AudioNode | null = null;
+let wet: AudioNode | null = null;    // galm voor effecten (marimba en fanfare)
 let noise: AudioBuffer | null = null;
 let unlockInstalled = false;
 const listeners = new Set<(on: boolean) => void>();
+const volListeners = new Set<() => void>();
 
-export function soundEnabled(): boolean {
-  try { return localStorage.getItem(KEY) !== '0'; } catch { return true; }
+const readVol = (key: string, fallback: number) => {
+  try { const v = localStorage.getItem(key); if (v === null) return fallback; const n = Number(v); return Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : fallback; }
+  catch { return fallback; }
+};
+/** Volume van de geluidseffecten (0..1). Wie vroeger "geluid uit" koos, begint op 0. */
+export function sfxVolume(): number {
+  let old: string | null = null;
+  try { old = localStorage.getItem(KEY); } catch { /* */ }
+  return readVol(SFX_KEY, old === '0' ? 0 : 0.8);
 }
+/** Volume van de achtergrondmuziek (0..1). */
+export function musicVolume(): number { return readVol(MUSIC_KEY, 0.35); }
 
-export function setSoundEnabled(on: boolean) {
-  try { localStorage.setItem(KEY, on ? '1' : '0'); } catch { /* privévenster */ }
-  if (on) { void unlock(); }
-  listeners.forEach((l) => l(on));
+function applyVolumes() {
+  if (!ctx) return;
+  const t = ctx.currentTime;
+  sfxBus?.gain.setTargetAtTime(sfxVolume() * 1.05, t, 0.05);
+  musicBus?.gain.setTargetAtTime(musicVolume() * 0.9, t, 0.08);
 }
+export function setSfxVolume(v: number) {
+  try { localStorage.setItem(SFX_KEY, String(Math.min(1, Math.max(0, v)))); } catch { /* privévenster */ }
+  if (v > 0) void unlock();
+  applyVolumes(); volListeners.forEach((l) => l()); listeners.forEach((l) => l(v > 0));
+}
+export function setMusicVolume(v: number) {
+  try { localStorage.setItem(MUSIC_KEY, String(Math.min(1, Math.max(0, v)))); } catch { /* privévenster */ }
+  if (v > 0) void unlock();
+  applyVolumes(); volListeners.forEach((l) => l());
+}
+export function onVolumeChange(l: () => void) { volListeners.add(l); return () => { volListeners.delete(l); }; }
 
+export function soundEnabled(): boolean { return sfxVolume() > 0; }
+export function setSoundEnabled(on: boolean) { setSfxVolume(on ? 0.8 : 0); }
 export function onSoundChange(l: (on: boolean) => void) { listeners.add(l); return () => { listeners.delete(l); }; }
+
+function makeReverb(c: AudioContext, seconds: number, decay: number) {
+  const len = Math.floor(c.sampleRate * seconds);
+  const ir = c.createBuffer(2, len, c.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, decay);
+  }
+  const conv = c.createConvolver(); conv.buffer = ir;
+  return conv;
+}
 
 function context(): AudioContext | null {
   if (ctx) return ctx;
@@ -39,23 +79,31 @@ function context(): AudioContext | null {
     comp.threshold.value = -16; comp.ratio.value = 4; comp.attack.value = 0.002; comp.release.value = 0.12;
     const master = ctx.createGain(); master.gain.value = 0.85;
     master.connect(comp); comp.connect(ctx.destination);
-    out = master;
-    // kleine kamergalm: zelfgemaakte impulsrespons (ruis die uitsterft)
-    const len = Math.floor(ctx.sampleRate * 1.8);
-    const ir = ctx.createBuffer(2, len, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const d = ir.getChannelData(ch);
-      for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
-    }
-    const conv = ctx.createConvolver(); conv.buffer = ir;
+    // twee aparte kanalen: effecten en muziek, elk met een eigen volume en galm
+    sfxBus = ctx.createGain(); sfxBus.connect(master);
+    musicBus = ctx.createGain(); musicBus.connect(master);
+    out = sfxBus;
+    const conv = makeReverb(ctx, 1.8, 3.2);
     const wg = ctx.createGain(); wg.gain.value = 0.32;
-    conv.connect(wg); wg.connect(master);
+    conv.connect(wg); wg.connect(sfxBus);
     wet = conv;
+    const mconv = makeReverb(ctx, 2.6, 2.6);
+    const mwg = ctx.createGain(); mwg.gain.value = 0.45;
+    mconv.connect(mwg); mwg.connect(musicBus);
+    musicWet = mconv;
+    applyVolumes();
     noise = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
     const d = noise.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
   } catch { ctx = null; }
   return ctx;
+}
+
+/** Voor de muziek: de gedeelde audio en het muziekkanaal (null zolang de browser geen geluid toelaat). */
+export function musicGraph(): { c: AudioContext; out: AudioNode; wet: AudioNode; noise: AudioBuffer } | null {
+  const c = context();
+  if (!c || c.state !== 'running' || !musicBus || !musicWet || !noise) return null;
+  return { c, out: musicBus, wet: musicWet, noise };
 }
 
 async function unlock() {
@@ -72,7 +120,7 @@ async function unlock() {
 export function installUnlock() {
   if (unlockInstalled || typeof window === 'undefined') return;
   unlockInstalled = true;
-  const h = () => { if (soundEnabled()) void unlock(); };
+  const h = () => { if (soundEnabled() || musicVolume() > 0) void unlock(); };
   for (const ev of ['pointerdown', 'touchend', 'keydown']) window.addEventListener(ev, h, { capture: true, passive: true });
 }
 
