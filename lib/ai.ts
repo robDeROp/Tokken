@@ -4,7 +4,7 @@
 // Getraind met scripts/ai-train/*. Gewichten in ai-weights.ts. Gedeeld door website en server.
 import {
   START, ENTRY, TRACK, COLORS, teamOf, partnerOf, allInLane, teamDone, pieceAtTrack, makeDeck, applyAction,
-  handHasMove, needsFreeExit, playedCardThisRound, allMovesForCard, matchMove, progress, hitChance, botActionLevel, asLevel, BOT_LEVEL_NAME,
+  handHasMove, needsFreeExit, playedCardThisRound, partnerBlocks, allMovesForCard, matchMove, progress, hitChance, botActionLevel, asLevel, BOT_LEVEL_NAME,
   type State, type Piece, type Color, type Card, type Rank, type Action, type Team, type BotLevel,
 } from './engine.ts';
 import { AI_NET } from './ai-weights.ts';
@@ -275,24 +275,8 @@ function teamKills(before: Piece[], after: Piece[], c: Color): number {
 /** Een mens slaat zijn ploegmaat enkel als het duidelijk loont: straf in winstkans per geslagen eigen pion. */
 const TEAM_KILL_PENALTY = 0.04;
 
-/** Hoeveel pionnen van mijn ploegmaat ik met mijn eigen blokkade (pion op mijn eigen 1) tegenhou:
- *  zijn pion staat vlak achter mijn 1 en moet erlangs naar zijn huisje. Dichtbij weegt zwaarder.
- *  (Het netwerk ziet enkel blokkades van de andere ploeg; een mens houdt zijn ploegmaat niet nodeloos vast.) */
-export function teamBlocks(P: Piece[], c: Color): number {
-  const s = START(c);
-  const me = P.find((p) => p.color === c && p.pos.t === 'track' && p.pos.i === s);
-  if (!me) return 0;
-  const mate = partnerOf(c);
-  let n = 0;
-  for (const p of P) {
-    if (p.color !== mate || p.pos.t !== 'track') continue;
-    const d = (s - p.pos.i + TRACK) % TRACK;          // vakjes tot aan mijn blokkade
-    const toEntry = (ENTRY(mate) - p.pos.i + TRACK) % TRACK;
-    if (d < 1 || d > 13 || d > toEntry) continue;      // ver weg of hij gaat eerst zijn huisje in
-    n += d <= 7 ? 1 : 0.5;
-  }
-  return n;
-}
+/** Pionnen van mijn ploegmaat die ik met mijn eigen blokkade tegenhou (het netwerk ziet enkel blokkades van de andere ploeg). */
+export const teamBlocks = partnerBlocks;
 const TEAM_BLOCK_PENALTY = 0.05;
 /** Zelfde straf in het voorkeursmodel van De Kloon (in logit-punten; "blijf op je 1" weegt daar ~3,5). */
 const HUMAN_TEAM_BLOCK = 6;

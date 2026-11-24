@@ -419,4 +419,25 @@ test('ploegmaat niet vasthouden: computer gaat van zijn eigen 1 als zijn ploegma
   }
 });
 
+test('robots houden hun ploegmaat niet vast met hun blokkade', () => {
+  for (const level of [3, 4, 5] as BotLevel[]) {
+    let moved = 0;
+    for (let g = 0; g < 10; g++) {
+      const st = newGame('training', mulberryOr(g + 80));
+      const c = st.turn, mate = partnerOf(c);
+      const P = emptyPieces();
+      const mine = P.filter((p) => p.color === c), his = P.filter((p) => p.color === mate);
+      mine[0].pos = tr(START(c));                          // blokkade op mijn 1
+      mine[1].pos = tr((ENTRY(c) - 8 + TRACK) % TRACK);    // kan met een 10 zijn huisje in
+      his[0].pos = tr((START(c) - 3 + TRACK) % TRACK);     // ploegmaat vlak achter mijn 1
+      for (const o of [((c + 1) % 4) as Color, ((c + 3) % 4) as Color]) P.find((p) => p.color === o)!.pos = tr((START(o) + 40) % TRACK);
+      st.pieces = P;
+      st.hands[c] = [{ id: 901, rank: '10', suit: 'S' }, { id: 902, rank: '9', suit: 'H' }];
+      const a = botMove(st, c, level, mulberryOr(g + 7));
+      if (a.type === 'play' && a.move.kind === 'step' && a.move.piece === mine[0].id) moved++;
+    }
+    assert.ok(moved >= 9, `niveau ${level} bleef ${10 - moved}/10 keer zijn ploegmaat blokkeren`);
+  }
+});
+
 console.log(`${passed} tests OK`);

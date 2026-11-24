@@ -573,9 +573,29 @@ export function progress(p: Piece): number {
   return v;
 }
 
+/** Hoeveel pionnen van c's ploegmaat c tegenhoudt met zijn eigen blokkade (pion op c's eigen 1):
+ *  de ploegmaat staat vlak achter die 1 en moet erlangs naar zijn huisje. Dichtbij weegt zwaarder. */
+export function partnerBlocks(P: Piece[], c: Color): number {
+  const s = START(c);
+  if (!P.some((p) => p.color === c && p.pos.t === 'track' && p.pos.i === s)) return 0;
+  const mate = partnerOf(c);
+  let n = 0;
+  for (const p of P) {
+    if (p.color !== mate || p.pos.t !== 'track') continue;
+    const d = (s - p.pos.i + TRACK) % TRACK;          // vakjes tot aan de blokkade
+    const toEntry = (ENTRY(mate) - p.pos.i + TRACK) % TRACK;
+    if (d < 1 || d > 13 || d > toEntry) continue;      // ver weg, of hij gaat eerst zijn huisje in
+    n += d <= 7 ? 1 : 0.5;
+  }
+  return n;
+}
+/** Straf (in vakjes) per ploegmaat die je met je blokkade vasthoudt: een mens doet dat niet nodeloos. */
+const TEAM_BLOCK = 20;
+
 function evaluate(P: Piece[], t: Team): number {
   let s = 0;
   for (const p of P) s += (teamOf(p.color) === t ? 1 : -0.9) * progress(p);
+  for (const x of COLORS) s -= (teamOf(x) === t ? 1 : -0.9) * TEAM_BLOCK * partnerBlocks(P, x);
   if (teamDone(P, t)) s += 10000;
   return s;
 }
@@ -656,6 +676,7 @@ function evaluateTactical(P: Piece[], t: Team, W: typeof AI = AI): number {
     }
     s += sign * v;
   }
+  for (const x of COLORS) s -= (teamOf(x) === t ? 1 : -0.95) * TEAM_BLOCK * partnerBlocks(P, x);
   // dreiging: onze pionen die vlak achter een tegenstander staan (die moet vluchten)
   if (W.threat) for (const a of P) {
     if (a.pos.t !== 'track') continue;
